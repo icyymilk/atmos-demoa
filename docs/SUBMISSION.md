@@ -2,8 +2,8 @@
 
 ## 交付地址
 
-- 在线 Demo：发布成功后补充。
-- GitHub 源码：待指定公开仓库。
+- 在线 Demo：https://atmos-builder-cyx.pale-earth-3846.chatgpt.site （已发布为 public；当前执行环境访问时触发 Cloudflare 403，尚未通过外网访问验收，需要在评审环境确认或更换托管。）
+- GitHub 源码：待指定公开仓库。当前完整源码已保存在本地 Git 仓库，并可导出 ZIP。
 
 ## 实现思路
 
