@@ -47,3 +47,7 @@ next-env.d.ts
 
 # TypeScript build cache
 *.tsbuildinfo
+
+# Local agent workspaces and operator-owned plugin credentials
+/.atmos/
+/atmos.local.json

@@ -1,6 +1,6 @@
 # Atmos
 
-一个 Atoms 风格的 AI 应用创作工作台：输入需求，由模型规划并生成单页应用，在隔离预览中直接操作，再通过对话继续迭代。
+一个 Atoms 风格的 AI 应用创作工作台：输入需求，由 Agent 自主调用工具并生成单页应用，在隔离预览中直接操作，再通过对话继续迭代。
 
 > 无密钥可体验三个预置模板。自由生成与修改需要体验者在设置中填写自己的模型 API Key。模板模式与 AI 生成模式在界面中明确区分。
 
@@ -13,8 +13,10 @@
 - 天蓝色中文创作首页、示例模板、项目列表与搜索；桌面双栏工作台、手机对话/应用切换。
 - Canvas 粒子轨道与鼠标轻交互；支持手动暂停、系统减少动态效果，并在页面隐藏或粒子区域离屏时停止绘制。
 - DeepSeek、OpenAI、OpenRouter、通义千问四种 OpenAI 兼容服务，可修改模型 ID；支持真实短请求测试连接、配置取消与服务偏好记忆（不记忆 Key）。
-- 真实模型工作流：需求规划 → 流式代码生成 → 文档与依赖检查 → 必要时一次自动修复 → 保存版本。
-- SSE 展示真实阶段及代码生成字符数；支持停止生成、认证失败、限流、超时、长度截断等反馈。
+- Agent Harness：模型决策 → MCP 工具执行 → 工具结果回传 → 继续决策，直到交付检查通过或达到停止条件。无固定阶段或固定修复次数。
+- 真实网页读取、Exa 网络搜索、隔离文件读写与精确编辑、项目内检索、任务清单、项目记忆。
+- 本机插件目录与 SKILL.md 按需加载，支持 stdio / HTTP / SSE MCP；界面可启停插件和查看工具调用轨迹。
+- SSE 展示实际模型轮次、工具参数、结果、耗时与停止原因；支持停止生成、认证失败、限流、超时、长度截断等反馈。
 - iframe 中真实运行 HTML/CSS/JS；桌面/手机宽度切换、源码查看、复制。
 - Cloudflare D1 保存项目、版本、应用状态；本地运行使用本机 SQLite，无需云端账号。未同步的应用状态暂存于当前标签页的 sessionStorage，刷新后重试保存；成功同步后移除备份。
 - 任务看板、记账本、番茄钟三个可交互模板。
@@ -29,7 +31,8 @@
 | 全栈框架 | Vinext / Vite，Next.js App Router 风格 |
 | 部署 | Cloudflare Workers，经 Sites 发布 |
 | 数据 | Cloudflare D1（SQLite）、Drizzle schema / migrations、参数化 SQL |
-| 智能体编排 | 显式 TypeScript 工作流，同一个选定模型分别承担规划与实现角色 |
+| 智能体运行层 | Node.js Harness，自主工具循环、上下文管理、预算与交付检查 |
+| 工具与扩展 | 官方 MCP TypeScript SDK、stdio / HTTP / SSE、plugin.json、SKILL.md |
 | 模型协议 | OpenAI 兼容 Chat Completions，流式 SSE |
 | 执行环境 | `iframe sandbox="allow-scripts allow-forms"` + 预置 CSP |
 
@@ -58,15 +61,19 @@ npm run test:integration  # 需保持本地开发服务器运行
 
 查看生产构建的本地运行效果：先运行 `npm run build`，再运行 `npm start`。模型 Key 由页面填写，无需 `.env` 或服务端共享密钥。默认模型名称可能随提供方变化，可在界面修改。
 
+架构、插件配置与验证方法见 [Harness 工程说明](docs/HARNESS.md)。
+
 ## 关键目录
 
 ```text
 app/page.tsx                       创作空间、工作台与交互
 app/globals.css                    响应式界面样式
 app/api/session/route.ts           建立访客会话
-app/api/generate/route.ts          编排、流式事件、版本提交
+app/api/generate/route.ts          鉴权、转发 Agent 事件、原子提交
+harness/                         Agent 循环、模型协议、MCP、插件、隔离工作区
+plugins/                         开发 Skill、Exa、stdio 工具示例
 app/api/projects/                  查询、状态保存、重命名、删除、恢复
-lib/generator.ts                  模型客户端、生成契约、结构检查
+lib/generator.ts                  连接测试、应用契约与结构检查
 lib/preview.ts                    CSP、预览数据桥、独立导出
 lib/templates.ts                  三个真实交互模板
 lib/storage.ts                    D1访问、会话校验、边界处理
@@ -82,26 +89,23 @@ docs/SUBMISSION.md                提交说明和演示步骤
 ```mermaid
 sequenceDiagram
     participant U as 创作者
-    participant W as 工作台
-    participant A as Worker API
-    participant M as 所选模型服务
+    participant W as Worker API
+    participant A as Node Agent Harness
+    participant M as 模型
+    participant T as MCP 工具
     participant D as D1
-    participant P as 沙箱预览
-    U->>W: 填写 Key 和应用需求
-    W->>A: POST /api/generate
-    A->>M: 规划需求
-    M-->>A: 应用名称与实现计划
-    A-->>W: SSE 计划与阶段
-    A->>M: 生成或修改完整 HTML
-    M-->>A: 流式代码
-    A->>A: 检查结构，必要时修复一次
-    A->>D: 原子保存项目与新版本
-    A-->>W: 项目 ID
-    W->>P: CSP + 数据桥 + 应用代码
-    U->>P: 添加任务等实际交互
-    P->>W: 受限 postMessage 状态消息
-    W->>A: 保存应用状态
-    A->>D: 更新状态 JSON
+    U->>W: 任务 + 当前页 Key
+    W->>A: 已认证上下文与工作区
+    loop 直到交付或停止
+        A->>M: 消息历史 + 可用工具
+        M-->>A: tool_calls
+        A->>T: 执行模型选定的工具
+        T-->>A: 真实结果或错误
+        A-->>U: 轮次、工具、结果
+    end
+    A-->>W: 通过检查的代码、文件、最终回复、轨迹
+    W->>D: 原子保存版本
+    W-->>U: 可交互预览
 ```
 
 - 数据库共三张表：`sessions`、`projects`、`versions`。
@@ -123,7 +127,8 @@ sequenceDiagram
 4. 预览不能调用网络，适用于本地交互小工具；无真正的支付、外部数据集成和独立后端部署。
 5. 没有生产级的滥用检测、IP 限流、账号恢复、后台任务队列或自动扩缩容策略。
 6. 预览基于浏览器沙箱，不能中断生成代码中的无限循环。高风险的任意代码执行需进一步使用独立源与容器资源隔离。
-7. 对话迭代以最新版代码和当前需求为依据，未实现长期多轮语义记忆或并行多智能体自治协作。
+7. 对话携带近期需求和回复、版本文件及项目记忆；尚未实现并行多 Agent、后台队列或停止任务的一键恢复。
+8. 当前 Harness 面向本地 Node 运行；旧 Sites 公网部署不包含这一运行层，云端迁移需单独安排。
 
 ## 后续优先级
 

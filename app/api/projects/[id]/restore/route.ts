@@ -14,7 +14,7 @@ export async function POST(request: Request, ctx: { params: Promise<{ id: string
     if (current >= 40) throw new ApiError('此项目已达到 40 个版本的体验上限，请导出源码或新建项目。');
     const now = Date.now();
     const result = await db().batch([
-      db().prepare('INSERT INTO versions (id, project_id, number, prompt, summary, code, mode, created_at) SELECT ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM projects WHERE id = ? AND current_version = ?)').bind(revision, id, current + 1, `恢复版本 v${input.number}`, `已将 v${input.number} 的代码恢复为新版本，历史记录与应用数据均保留。`, version.code, 'restore', now, id, current),
+      db().prepare('INSERT INTO versions (id, project_id, number, prompt, summary, code, mode, created_at, files) SELECT ?, ?, ?, ?, ?, ?, ?, ?, ? WHERE EXISTS (SELECT 1 FROM projects WHERE id = ? AND current_version = ?)').bind(revision, id, current + 1, `恢复版本 v${input.number}`, `已将 v${input.number} 的代码恢复为新版本，历史记录与应用数据均保留。`, version.code, 'restore', now, version.files || '{}', id, current),
       db().prepare('UPDATE projects SET current_version = ?, updated_at = ? WHERE id = ? AND EXISTS (SELECT 1 FROM versions WHERE id = ?)').bind(current + 1, now, id, revision),
     ]);
     if (!result[0].meta.changes) throw new ApiError('项目已在其他窗口更新，请刷新后重试。', 409);

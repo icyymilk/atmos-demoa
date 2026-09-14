@@ -1,0 +1,1 @@
+{"id":"utilities","name":"常用计算工具","version":"1.0.0","description":"通过 stdio MCP 提供时间和数值计算；可作为自定义工具插件示例。","mcp":{"transport":"stdio","command":"${NODE}","args":["${PLUGIN_DIR}/server.mjs"]}}

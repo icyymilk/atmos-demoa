@@ -1,0 +1,1 @@
+{"id":"research","name":"Exa 网络检索","version":"1.0.0","description":"通过真实 HTTP MCP 搜索互联网与读取资料，受服务方免费额度限制。","mcp":{"transport":"http","url":"https://mcp.exa.ai/mcp","tools":["web_search_exa","web_fetch_exa","get_code_context_exa"]}}

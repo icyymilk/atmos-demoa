@@ -5,7 +5,7 @@ export async function GET(request: Request, ctx: Context) {
     const { id } = await ctx.params;
     const project = await getProject(id, await owner(request));
     const versions = await db().prepare('SELECT * FROM versions WHERE project_id = ? ORDER BY number ASC').bind(id).all();
-    return Response.json({ ...project, owner: undefined, state: JSON.parse(project.state as string), versions: versions.results }, { headers: { 'Cache-Control': 'no-store' } });
+    return Response.json({ ...project, owner: undefined, state: JSON.parse(project.state as string), versions: versions.results.map(v => ({ ...v, files: JSON.parse(String(v.files || '{}')), trace: JSON.parse(String(v.trace || '[]')) })) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) { return fail(e); }
 }
 export async function PATCH(request: Request, ctx: Context) {

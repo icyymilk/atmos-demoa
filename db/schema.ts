@@ -10,5 +10,6 @@ export const projects = sqliteTable('projects', {
 export const versions = sqliteTable('versions', {
   id: text('id').primaryKey(), projectId: text('project_id').notNull().references(() => projects.id, { onDelete: 'cascade' }),
   number: integer('number').notNull(), prompt: text('prompt').notNull(), summary: text('summary').notNull(),
+  files: text('files').notNull().default('{}'), trace: text('trace').notNull().default('[]'),
   code: text('code').notNull(), mode: text('mode').notNull(), createdAt: integer('created_at').notNull(),
 }, t => [uniqueIndex('idx_versions_project_number').on(t.projectId, t.number)]);

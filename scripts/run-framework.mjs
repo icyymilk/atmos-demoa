@@ -1,4 +1,5 @@
 import { spawnSync } from "node:child_process";
+import { startHarness } from "./harness-process.mjs";
 import { fileURLToPath } from "node:url";
 import { readExecutionProfile } from "./execution-profile.mjs";
 
@@ -12,6 +13,12 @@ if (managedLinux && command === "build") {
   ], { stdio: "inherit" });
   if (result.error) throw result.error;
   process.exit(result.status ?? 1);
+}
+
+// Only local development starts the Node harness. Cloud publishing is separate.
+if (command === "dev") {
+  await startHarness();
+  console.log('Atmos Agent harness ready (loop + MCP + Skills).');
 }
 
 // Import in this process so the preview owner retains its PID and signals.

@@ -1,0 +1,4 @@
+{
+  "plugins": ["./plugins/developer", "./plugins/research", "./plugins/utilities"],
+  "limits": {"maxIterations": 24, "maxToolCalls": 80, "timeoutSeconds": 600}
+}

@@ -1,5 +1,5 @@
 export type Project = { id: string; title: string; current_version: number; created_at: number; updated_at: number };
-export type Version = { id: string; project_id: string; number: number; prompt: string; summary: string; code: string; mode: string; created_at: number };
+export type Version = { id: string; project_id: string; number: number; prompt: string; summary: string; code: string; mode: string; created_at: number; files?: Record<string,string>; trace?: import('./agent-types').AgentEvent[] };
 export type ProjectDetail = Project & { versions: Version[]; state: Record<string, unknown> };
 export type ModelConfig = { provider: string; model: string; apiKey: string };
 export const providers = {

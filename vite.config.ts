@@ -13,6 +13,7 @@ const localBindingConfig = {
   main: "vinext/server/fetch-handler",
   compatibility_flags: ["nodejs_compat"],
   ...localBindings(hostingConfig),
+  vars: process.env.ATMOS_HARNESS_URL ? { ATMOS_HARNESS_URL: process.env.ATMOS_HARNESS_URL, ATMOS_HARNESS_TOKEN: process.env.ATMOS_HARNESS_TOKEN! } : {} as Record<string, string>,
 };
 
 export default defineConfig(async () => {
