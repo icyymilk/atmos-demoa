@@ -5,6 +5,8 @@ import { validateCode } from '../lib/generator';
 
 export class Workspace {
   constructor(readonly root: string) {}
+  private onChange?: (change:{path:string;content?:string})=>Promise<void>;
+  observe(callback:(change:{path:string;content?:string})=>Promise<void>){this.onChange=callback;}
   resolve(name: string) {
     if (!name || name.length > 180 || name.includes('\\') || name.split('/').some(part => !part || part === '..' || part === '.') || path.isAbsolute(name)) throw new Error('文件路径必须是工作区内的相对路径，不能包含 ..。');
     return path.join(this.root, name);
@@ -26,9 +28,10 @@ export class Workspace {
     const files = await this.list();
     if (!files.includes(name) && files.length >= 40) throw new Error('工作区最多 40 个文件。');
     const target = await this.guard(name); await mkdir(path.dirname(target), { recursive: true }); await writeFile(target, content, 'utf8');
+    await this.onChange?.({path:name,content});
     return { path: name, characters: content.length };
   }
-  async remove(name: string) { await unlink(await this.guard(name)); return { deleted: name }; }
+  async remove(name: string) { await unlink(await this.guard(name)); await this.onChange?.({path:name}); return { deleted: name }; }
   async list(dir = ''): Promise<string[]> {
     const out: string[] = [];
     for (const entry of await readdir(path.join(this.root, dir), { withFileTypes: true }).catch(() => [])) {

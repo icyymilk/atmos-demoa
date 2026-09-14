@@ -43,7 +43,13 @@ try {
   assert.equal((await call('/api/projects/'+id+'/restore',{cookie,data:{number:1}})).status,400);
   p=await (await call('/api/projects/'+id,{cookie})).json(); assert.equal(p.current_version,40); assert.deepEqual(p.state,state);
   const bad=await call('/api/generate',{cookie,data:{prompt:'制作一个计数器',mode:'ai',provider:'deepseek',model:'deepseek-flash',apiKey:'invalid-key-for-validation-only'}});
-  assert.match(await bad.text(), /模型认证失败/);
+  const badEvents=(await bad.text()).split('\n').filter(line=>line.startsWith('data: ')).map(line=>JSON.parse(line.slice(6)));
+  assert.ok(badEvents.some(e=>e.type==='error'&&/模型认证失败/.test(e.message)));
+  const runId=badEvents.find(e=>e.type==='workspace'&&e.event.kind==='init')?.event.runId;assert.ok(runId);
+  const snapshot=await (await call('/api/runs/'+runId,{cookie})).json();assert.equal(snapshot.status,'stopped');assert.deepEqual(snapshot.files,{});
+  assert.equal((await call('/api/runs/'+runId,{cookie:other})).status,404);
+  assert.equal((await call('/api/runs/'+runId)).status,401);
+  assert.equal((await call('/api/runs/not-a-run',{cookie})).status,400);
   const connection=await call('/api/models/test',{cookie,data:{provider:'deepseek',model:'deepseek-flash',apiKey:'invalid-key-for-validation-only'}});
   assert.equal(connection.status,502); assert.match(await connection.text(), /模型认证失败/);
   console.log('PASS: 三个模板、SSE事件、会话隔离、数据持久化、回滚、重命名、输入验证、CSRF和模型认证错误');

@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { loadExtensions, connectPlugin, setPluginEnabled } from './extensions';
 import { connectCore } from './core-tools';
 import { Workspace } from './workspace';
+import { LiveRun,readRunSnapshot } from './live-run';
 import { runAgent } from './loop';
 import { mergeAgentEvent, clipped } from '../lib/agent-events';
 import type { AgentEvent, AgentCatalog } from '../lib/agent-types';
@@ -14,6 +15,7 @@ const root=process.cwd(),token=process.env.ATMOS_HARNESS_TOKEN;
 if(!token)throw new Error('Harness requires a per-start authentication token.');
 const inputSchema=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),runId:z.string().uuid().optional(),prompt:z.string().min(1).max(4000),config:z.object({provider:z.string(),model:z.string().min(1).max(150),apiKey:z.string().min(1).max(1000)}),files:z.record(z.string().max(180000)).default({}),history:z.array(z.object({prompt:z.string(),summary:z.string()})).max(8).default([])});
 const active=new Set<string>();
+const liveRuns=new Map<string,LiveRun>();
 const controllers=new Set<AbortController>();
 async function readBody(request:import('node:http').IncomingMessage){let body='';for await(const chunk of request){body+=chunk;if(Buffer.byteLength(body)>1100000)throw new Error('请求过大');}return JSON.parse(body||'{}');}
 function authorised(header:string|undefined){const value=Buffer.from(header||''),expected=Buffer.from(`Bearer ${token}`);return value.length===expected.length&&timingSafeEqual(value,expected);}
@@ -38,6 +40,10 @@ const server=createServer(async(request,response)=>{
     if(request.url==='/plugins'){
       const input=z.object({id:z.string(),enabled:z.boolean()}).parse(await readBody(request));await setPluginEnabled(root,input.id,input.enabled);response.setHeader('Content-Type','application/json');response.end('{"ok":true}');return;
     }
+    if(request.url==='/snapshot'){
+      const input=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),runId:z.string().uuid()}).parse(await readBody(request));
+      try{const state=liveRuns.get(`${input.owner}:${input.runId}`)?.state||await readRunSnapshot(root,input.owner,input.runId);response.setHeader('Content-Type','application/json');response.end(JSON.stringify(state));}catch{response.writeHead(404,{'Content-Type':'application/json'}).end(JSON.stringify({error:'工作区快照不存在或不属于当前会话。'}));}return;
+    }
     if(request.url!=='/run'){response.writeHead(404).end();return;}
     const input=inputSchema.parse(await readBody(request));
     if(active.has(input.owner)||active.size>=3){response.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:'已有任务运行中，请停止或等待完成后再开始。'}));return;}
@@ -47,19 +53,24 @@ const server=createServer(async(request,response)=>{
     let trace:AgentEvent[]=[];
     const redact=(text:string)=>input.config.apiKey?text.replaceAll(input.config.apiKey,'[REDACTED]'):text;
     const emit=(data:object)=>{if(!response.destroyed)response.write(`data: ${redact(JSON.stringify(data))}\n\n`);};
+    const live=new LiveRun(runId,directory,event=>emit({type:'workspace',event}));
+    liveRuns.set(`${input.owner}:${runId}`,live);
     let heartbeat:ReturnType<typeof setInterval>|undefined;
     try{
       await workspace.init(input.files);const extensions=await loadExtensions(root);
       response.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Accel-Buffering':'no'});
+      await live.attach(workspace);
       heartbeat=setInterval(()=>{if(!response.destroyed)response.write(': heartbeat\n\n');},10000);
-      const result=await runAgent(input,{workspace,extensions,signal:abort.signal,runId,emit:event=>{const safe=JSON.parse(redact(JSON.stringify(event))) as AgentEvent;trace=mergeAgentEvent(trace,{...safe,input:safe.input?clipped(safe.input,600):undefined,output:safe.output?clipped(safe.output,1400):undefined});emit({type:'agent',event:safe});}});
+      const result=await runAgent(input,{workspace,extensions,signal:abort.signal,runId,workspaceEvent:event=>live.event(event),emit:event=>{const safe=JSON.parse(redact(JSON.stringify(event))) as AgentEvent;trace=mergeAgentEvent(trace,{...safe,input:safe.input?clipped(safe.input,600):undefined,output:safe.output?clipped(safe.output,1400):undefined});emit({type:'agent',event:safe});}});
       await writeFile(path.join(directory,'run.json'),redact(JSON.stringify({runId,status:'completed',trace,title:result.title,summary:result.summary},null,2)));
+      await live.finish('completed');
       emit({type:'result',...result,trace});
     }catch(error){
       const message=abort.signal.aborted?'任务已停止。':(error as Error).message;
+      await live.finish('stopped',message);
       emit({type:'error',message});
       await mkdir(directory,{recursive:true});await writeFile(path.join(directory,'run.json'),redact(JSON.stringify({runId,status:'stopped',message,trace},null,2)));
-    }finally{if(heartbeat)clearInterval(heartbeat);active.delete(input.owner);controllers.delete(abort);response.end();}
+    }finally{if(heartbeat)clearInterval(heartbeat);active.delete(input.owner);liveRuns.delete(`${input.owner}:${runId}`);controllers.delete(abort);response.end();}
   }catch(error){if(!response.headersSent)response.writeHead(400,{'Content-Type':'application/json'});response.end(JSON.stringify({error:(error as Error).message.slice(0,300)}));}
 });
 server.listen(0,'127.0.0.1',()=>{const address=server.address();if(address&&typeof address!=='string')process.send?.({port:address.port});});

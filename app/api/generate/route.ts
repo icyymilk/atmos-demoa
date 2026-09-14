@@ -40,7 +40,7 @@ export async function POST(request:Request){
             if(!upstream.ok){const error=await upstream.json() as {error?:string};throw new ApiError(error.error||'Agent 运行层拒绝了请求。',upstream.status);}
             if(!upstream.body)throw new ApiError('Agent 未返回事件流。',502);
             const reader=upstream.body.getReader(),decoder=new TextDecoder();let buffer='',result:Artifact|undefined;
-            function receive(line:string){if(!line.startsWith('data:'))return;const event=JSON.parse(line.slice(5));if(event.type==='agent')emit(event);else if(event.type==='error')throw new ApiError(event.message,502);else if(event.type==='result')result=event;}
+            function receive(line:string){if(!line.startsWith('data:'))return;const event=JSON.parse(line.slice(5));if(event.type==='agent'||event.type==='workspace')emit(event);else if(event.type==='error')throw new ApiError(event.message,502);else if(event.type==='result')result=event;}
             try{while(true){const {done,value}=await reader.read();if(done)break;buffer+=decoder.decode(value,{stream:true});const lines=buffer.split('\n');buffer=lines.pop()||'';lines.forEach(receive);}buffer+=decoder.decode();if(buffer.trim())receive(buffer);}finally{await reader.cancel().catch(()=>{});}
             if(!result)throw new ApiError('Agent 连接中断，尚未完成交付。',502);
             artifact=result;

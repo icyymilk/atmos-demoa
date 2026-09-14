@@ -6,7 +6,7 @@ export type ModelReply={content:string;calls:ToolCall[];finish:string};
 export class ModelOutputError extends Error {
   constructor(readonly reason:'length'|'incomplete'|'invalid',message:string){super(message);}
 }
-export type ModelProgress=(characters:number,publicText?:string,phase?:'reasoning'|'output')=>void;
+export type ModelProgress=(characters:number,publicText?:string,phase?:'reasoning'|'output',calls?:ToolCall[])=>void;
 export async function modelTurn(config:ModelConfig,messages:Message[],tools:ModelTool[],signal:AbortSignal,onProgress?:ModelProgress):Promise<ModelReply>{
   if(!Object.hasOwn(providers,config.provider))throw new Error('不支持的模型服务。');
   const provider=providers[config.provider as keyof typeof providers];
@@ -16,7 +16,7 @@ export async function modelTurn(config:ModelConfig,messages:Message[],tools:Mode
   const reader=response.body.getReader(),decoder=new TextDecoder();let buffer='',content='',finish='',size=0,lastAt=0;
   let phase:'reasoning'|'output'='output';
   const calls=new Map<number,ToolCall>();
-  function notify(force=false){if(force||Date.now()-lastAt>=120){lastAt=Date.now();onProgress?.(size,content,phase);}}
+  function notify(force=false){if(force||Date.now()-lastAt>=120){lastAt=Date.now();onProgress?.(size,content,phase,[...calls.values()]);}}
   function line(raw:string){
     if(!raw.startsWith('data:'))return;const text=raw.slice(5).trim();if(!text||text==='[DONE]')return;
     let data;try{data=JSON.parse(text);}catch{throw new ModelOutputError('invalid','模型返回的 SSE 数据格式损坏，本轮工具未执行。');}

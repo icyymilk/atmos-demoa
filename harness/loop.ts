@@ -5,11 +5,13 @@ import { modelTurn,ModelOutputError,type ModelReply,type Message,type ModelTool 
 import { connectCore,type CoreContext,type Completion } from './core-tools';
 import { connectPlugin,type Extensions,type Connection } from './extensions';
 import type { Workspace } from './workspace';
+import { draftFromCall } from './draft';
+import type { WorkspacePayload } from '../lib/live-workspace';
 import { clipped } from '../lib/agent-events';
 
 export class AgentStopped extends Error {constructor(readonly reason:string,message:string){super(message);}}
 export type RunInput={prompt:string;config:ModelConfig;history?:{prompt:string;summary:string}[]};
-export type RunOptions={workspace:Workspace;extensions:Extensions;signal:AbortSignal;emit:(event:AgentEvent)=>void;turn?:typeof modelTurn;runId?:string};
+export type RunOptions={workspace:Workspace;extensions:Extensions;signal:AbortSignal;emit:(event:AgentEvent)=>void;turn?:typeof modelTurn;runId?:string;workspaceEvent?:(event:WorkspacePayload)=>void};
 export function buildContext(base:Message[],turns:Message[][]):Message[]{
   const keep=turns.slice();
   while(keep.length>0&&(keep.length>8||JSON.stringify(keep).length>90000))keep.shift();
@@ -42,6 +44,7 @@ export async function runAgent(input:RunInput,options:RunOptions):Promise<Comple
     const turns:Message[][]=[];let repeated='',repeatCount=0;
     for(let iteration=1;iteration<=limits.maxIterations;iteration++){
       signal.throwIfAborted();if(toolCount>=limits.maxToolCalls)throw new AgentStopped('tool_limit','已达到工具调用上限，任务未标记完成。');
+      options.workspaceEvent?.({kind:'activity',action:'模型正在决定下一步',busy:false});
       budget(iteration);send({type:'iteration',iteration,text:`第 ${iteration} 轮 · 模型决定下一步`});
       let reply:ModelReply;
       let publicText='';
@@ -50,11 +53,13 @@ export async function runAgent(input:RunInput,options:RunOptions):Promise<Comple
       const messagesForModel=buildContext(base,turns);
       messagesForModel.push({role:'user',content:`当前工作区文件：${(await workspace.list()).join(', ')||'空'}。运行预算：剩余 ${limits.maxToolCalls-toolCount} 次工具调用、${limits.maxIterations-iteration+1} 轮模型请求；本轮最多 ${perTurn} 个工具。联网调用剩余 ${Math.max(0,researchLimit-researchCount)} 次。${nearLimit?'接近预算上限：停止资料检索，优先实现、验证和交付已有工作。':''}请先用简短中文说明当前进度和下一步。`});
       try{
-        reply=await (options.turn||modelTurn)(input.config,messagesForModel,available,signal,(size,text,phase)=>{
+        reply=await (options.turn||modelTurn)(input.config,messagesForModel,available,signal,(size,text,phase,calls)=>{
+          for(const call of calls||[]){const draft=draftFromCall(call,iteration);if(draft)options.workspaceEvent?.({kind:'draft',draft});}
           if(text){publicText=text;send({type:'assistant',iteration,text:clipped(text,6000),streaming:true});}
           send({type:'iteration',iteration,text:phase==='reasoning'?'模型正在推理，等待公开进度说明…':`第 ${iteration} 轮 · 正在接收回复与工具参数 ${(size/1000).toFixed(1)}k 字符`});
         });
       }catch(error){
+        options.workspaceEvent?.({kind:'draft_clear',discarded:true});
         if(publicText)send({type:'assistant',iteration,text:clipped(publicText,6000),streaming:false});
         if(!(error instanceof ModelOutputError)||signal.aborted)throw error;
         if(recoveries>=retryLimit)throw new AgentStopped('output_limit','模型输出仍不完整，已达到自动恢复上限；已有文件保留在本机，本轮工具未执行。');
@@ -83,10 +88,13 @@ export async function runAgent(input:RunInput,options:RunOptions):Promise<Comple
           }
           const tool=registry.get(call.function.name);if(!tool)throw new Error('未知工具，请从已注册工具中选择。');
           const args=JSON.parse(call.function.arguments);if(!args||typeof args!=='object'||Array.isArray(args))throw new Error('工具参数必须为 JSON 对象。');
+          options.workspaceEvent?.({kind:'activity',busy:true,path:typeof args.path==='string'?args.path:undefined,action:tool.original==='read_file'?'正在读取文件':tool.original==='delete_file'?'正在删除文件':/write|append|edit/.test(tool.original)?'正在写入文件':`正在执行 ${tool.original}`});
           const result=await tool.connection.client.callTool({name:tool.original,arguments:args},undefined,{signal,timeout:30000});
           ok=!result.isError;
           const full=JSON.stringify(result);const outputLimit=['load_skill','read_file'].includes(tool.original)?60000:10000;output=full.length>outputLimit?JSON.stringify({truncated:true,totalCharacters:full.length,preview:full.slice(0,outputLimit),hint:'工具结果过长，当前为摘要。请缩小查询范围，或使用 read_file 的 offset/length 分段读取项目文件。'}):full;
         }catch(error){ok=false;output=JSON.stringify({error:signal.aborted?'工具调用已取消':(error as Error).message.slice(0,500)});}
+        options.workspaceEvent?.({kind:'draft_clear',id:`${iteration}:${call.id}`,discarded:!ok});
+        options.workspaceEvent?.({kind:'activity',action:ok?'工具执行完成':'工具返回错误，等待模型处理',busy:false});
         messages.push({role:'tool',tool_call_id:call.id,content:output});
         send({type:'tool_end',iteration,callId:call.id,name:call.function.name,ok,output:clipped(output,5000),durationMs:Date.now()-start});
         budget(iteration);

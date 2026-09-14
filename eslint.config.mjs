@@ -9,6 +9,7 @@ const eslintConfig = defineConfig([
   globalIgnores([
     // Default ignores of eslint-config-next:
     ".next/**",
+    ".atmos/**", // Generated run files and local browser test caches.
     "out/**",
     "build/**",
     "next-env.d.ts",
