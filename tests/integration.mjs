@@ -34,8 +34,17 @@ try {
   assert.equal((await call('/api/generate',{cookie,data:{prompt:'x'.repeat(4001),mode:'template'}})).status,400);
   assert.equal((await call('/api/projects/'+id,{cookie,method:'PATCH',data:{action:'state',state:[]}})).status,400);
   assert.equal((await call('/api/session',{cookie,data:{},extra:{Origin:'https://untrusted.example'}})).status,403);
+  assert.equal((await call('/api/models/test',{data:{}})).status,401);
+  assert.equal((await call('/api/models/test',{cookie,data:{}})).status,400);
+  assert.equal((await call('/api/models/test',{cookie,data:{},extra:{Origin:'https://untrusted.example'}})).status,403);
+  // Restoring code must obey the same version limit as AI generation.
+  for (let number = 3; number <= 40; number++) assert.equal((await call('/api/projects/'+id+'/restore',{cookie,data:{number:1}})).status,200);
+  assert.equal((await call('/api/projects/'+id+'/restore',{cookie,data:{number:1}})).status,400);
+  p=await (await call('/api/projects/'+id,{cookie})).json(); assert.equal(p.current_version,40); assert.deepEqual(p.state,state);
   const bad=await call('/api/generate',{cookie,data:{prompt:'制作一个计数器',mode:'ai',provider:'deepseek',model:'deepseek-flash',apiKey:'invalid-key-for-validation-only'}});
-  assert.match(await bad.text(), /"type":"error"/);
+  assert.match(await bad.text(), /模型认证失败/);
+  const connection=await call('/api/models/test',{cookie,data:{provider:'deepseek',model:'deepseek-flash',apiKey:'invalid-key-for-validation-only'}});
+  assert.equal(connection.status,502); assert.match(await connection.text(), /模型认证失败/);
   console.log('PASS: 三个模板、SSE阶段、会话隔离、数据持久化、回滚、重命名、输入验证、CSRF和模型认证错误');
 } finally {
   for (const id of ids) assert.equal((await call('/api/projects/'+id,{cookie,method:'DELETE'})).status,200);

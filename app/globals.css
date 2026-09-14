@@ -326,3 +326,10 @@ input:focus-visible, textarea:focus-visible, select:focus-visible { outline-colo
 /* Keep compact labels and sky-colored actions legible. */
 .send-button, .export-button, .primary-button { color: #103952; }
 .launch-subtitle, .section-header p, .template-info p, .empty-projects strong, .empty-projects p { color: #6c8598; }
+.model-fields { border: 0; margin: 0; padding: 0; min-width: 0; }
+.connection-test { display: flex; align-items: center; gap: 12px; margin: 4px 0 16px; }
+.connection-test small { color: #6c8598; font-size: 11px; line-height: 1.6; }
+.connection-test button { white-space: nowrap; }
+.connection-result { padding: 12px 14px; border-radius: 10px; font-size: 12px; line-height: 1.7; margin: 0 0 16px; }
+.connection-result.success { background: #eaf6fd; color: #12628e; }
+.connection-result.failure { background: #fff0ee; color: #a73e36; }

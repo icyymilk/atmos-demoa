@@ -3,16 +3,18 @@ import { providers, type ModelConfig } from './types';
 
 export const appContract = `You are Atmos, an expert web application engineer. Return a complete runnable SINGLE HTML document, beginning <!DOCTYPE html> and ending </html>. Include all CSS and JavaScript inline. No markdown fences. Use vanilla JavaScript, no dependencies, imports, external scripts, fonts, images or network requests. All visible copy should be Simplified Chinese unless the user requests otherwise. Build polished responsive interactive applications with usable empty/error states, accessible labels and functional controls. Never use placeholder buttons or simulated business actions. Use DOM textContent for user-supplied text. Persistent data MUST use window.atmos.getState() (synchronous, returns a JSON object) and window.atmos.setState(fullObject) (synchronous, saves entire state). These methods are provided by the host before your code runs. Do NOT define or overwrite window.atmos. No localStorage, cookies, indexedDB, parent access, postMessage or navigation. Use defaults if state is empty; preserve prior state keys and data compatibility on edits. Sandbox blocks network access, external assets, top navigation and form submissions; handle forms with preventDefault. No backend integrations or actual payments are available. Do not claim those work. Return a compact implementation under 65000 characters.`;
 
-export async function completion(config: ModelConfig, system: string, prompt: string, signal: AbortSignal, onDelta?: (size: number) => void) {
+export async function completion(config: ModelConfig, system: string, prompt: string, signal: AbortSignal, onDelta?: (size: number) => void, maxTokens?: number) {
   const provider = providers[config.provider as keyof typeof providers];
   if (!provider) throw new ApiError('请选择受支持的模型服务。');
   const response = await fetch(provider.url, {
-    method: 'POST', signal, redirect: 'error',
+    // Workers supports manual/follow only. Never follow a redirect with the user's key.
+    method: 'POST', signal, redirect: 'manual',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
-    body: JSON.stringify({ ...(config.provider === 'deepseek' ? { thinking: { type: 'disabled' } } : config.provider === 'qwen' ? { enable_thinking: false } : {}), model: config.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], stream: true, max_tokens: onDelta ? 14000 : 1200 }),
+    body: JSON.stringify({ ...(config.provider === 'deepseek' ? { thinking: { type: 'disabled' } } : config.provider === 'qwen' ? { enable_thinking: false } : {}), model: config.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], stream: true, max_tokens: maxTokens ?? (onDelta ? 14000 : 1200) }),
   });
   if (!response.ok) {
     await response.body?.cancel();
+    if (response.status >= 300 && response.status < 400) throw new ApiError('模型服务返回了重定向，已停止请求。请更换受支持的模型服务。', 502);
     throw new ApiError(response.status === 401 || response.status === 403 ? '模型认证失败，请检查 API Key 和模型访问权限。' : response.status === 429 ? '模型额度不足或请求过于频繁，请稍后重试。' : `模型服务返回 ${response.status}，请检查模型名称或更换服务。`, 502);
   }
   if (!response.body) throw new ApiError('模型服务没有返回内容。', 502);
