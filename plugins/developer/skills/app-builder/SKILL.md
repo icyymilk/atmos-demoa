@@ -7,6 +7,8 @@ description: 创建或修改交互式网页应用时使用。定义交付标准�
 
 - index.html 是可运行的交付入口，内联 HTML/CSS/JS，不依赖外部网络和 npm。
 - 持久化调用 window.atmos.getState() 和 window.atmos.setState(fullObject)，宿主预先提供。
+- 每轮先用一两句中文说明面向用户的进度与下一步，不输出私有思维链。简单应用优先实现，不需要反复检索熟悉的基础 API。
+- 单次 write_file / append_file 至多 12000 字符，建议每块 6000–8000 字符。超长文件先 write_file，再按返回长度 append_file；不要一次输出完整大型 HTML。
 - 修改前读取现有文件，保留未被要求改变的功能和数据字段。
 - 先实现实际交互，再处理视觉细节。添加、编辑、删除、筛选等按钮必须执行真实行为。
 - 保存文件后使用 validate_app 检查语法及入口结构。失败时读取问题，修改并重新检查，次数由任务需要决定。

@@ -7,6 +7,7 @@ import { loadExtensions, connectPlugin, setPluginEnabled } from './extensions';
 import { connectCore } from './core-tools';
 import { Workspace } from './workspace';
 import { runAgent } from './loop';
+import { mergeAgentEvent, clipped } from '../lib/agent-events';
 import type { AgentEvent, AgentCatalog } from '../lib/agent-types';
 
 const root=process.cwd(),token=process.env.ATMOS_HARNESS_TOKEN;
@@ -43,7 +44,7 @@ const server=createServer(async(request,response)=>{
     active.add(input.owner);
     const runId=input.runId||randomUUID(),directory=path.join(root,'.atmos/runs',input.owner,runId),workspace=new Workspace(path.join(directory,'workspace'));
     const abort=new AbortController();controllers.add(abort);response.on('close',()=>{if(!response.writableEnded)abort.abort();});request.on('aborted',()=>abort.abort());
-    const trace:AgentEvent[]=[];
+    let trace:AgentEvent[]=[];
     const redact=(text:string)=>input.config.apiKey?text.replaceAll(input.config.apiKey,'[REDACTED]'):text;
     const emit=(data:object)=>{if(!response.destroyed)response.write(`data: ${redact(JSON.stringify(data))}\n\n`);};
     let heartbeat:ReturnType<typeof setInterval>|undefined;
@@ -51,7 +52,7 @@ const server=createServer(async(request,response)=>{
       await workspace.init(input.files);const extensions=await loadExtensions(root);
       response.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Accel-Buffering':'no'});
       heartbeat=setInterval(()=>{if(!response.destroyed)response.write(': heartbeat\n\n');},10000);
-      const result=await runAgent(input,{workspace,extensions,signal:abort.signal,runId,emit:event=>{const safe=JSON.parse(redact(JSON.stringify(event))) as AgentEvent;trace.push({...safe,input:safe.input?.slice(0,600),output:safe.output?.slice(0,1400)});emit({type:'agent',event:safe});}});
+      const result=await runAgent(input,{workspace,extensions,signal:abort.signal,runId,emit:event=>{const safe=JSON.parse(redact(JSON.stringify(event))) as AgentEvent;trace=mergeAgentEvent(trace,{...safe,input:safe.input?clipped(safe.input,600):undefined,output:safe.output?clipped(safe.output,1400):undefined});emit({type:'agent',event:safe});}});
       await writeFile(path.join(directory,'run.json'),redact(JSON.stringify({runId,status:'completed',trace,title:result.title,summary:result.summary},null,2)));
       emit({type:'result',...result,trace});
     }catch(error){

@@ -20,7 +20,7 @@ async function json(file:string,fallback:unknown) {try{return JSON.parse(await r
 export async function loadExtensions(root:string) {
   const config=await json(path.join(root,'atmos.config.json'),{});
   const local=await json(path.join(root,'atmos.local.json'),{});
-  const settings=z.object({plugins:z.array(z.string()).max(20).default([]),limits:z.object({maxIterations:z.number().int().min(1).max(60).default(24),maxToolCalls:z.number().int().min(1).max(200).default(80),timeoutSeconds:z.number().int().min(20).max(1800).default(600)}).default({})}).parse({...config,...local,limits:{...config.limits,...local.limits}});
+  const settings=z.object({plugins:z.array(z.string()).max(20).default([]),limits:z.object({maxIterations:z.number().int().min(1).max(60).default(24),maxToolCalls:z.number().int().min(1).max(200).default(30),maxCallsPerTurn:z.number().int().min(1).max(8).default(4),maxResearchCalls:z.number().int().min(0).max(20).default(6),maxOutputRetries:z.number().int().min(0).max(3).default(2),timeoutSeconds:z.number().int().min(20).max(1800).default(600)}).default({})}).parse({...config,...local,limits:{...config.limits,...local.limits}});
   const disabled=await json(path.join(root,'.atmos/plugin-state.json'),{});
   const plugins:Plugin[]=[],skills:Skill[]=[],errors:{id:string;error:string}[]=[];
   for(const directory of settings.plugins){

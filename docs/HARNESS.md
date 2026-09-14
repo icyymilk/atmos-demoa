@@ -22,11 +22,21 @@
 
 模型可以搜索资料、加载 Skill、读取或编辑文件、检查结果、反复修复，或直接完成简单任务。`complete_task` 是应用任务的交付边界：必须存在 `index.html` 并通过文档和 JavaScript 语法检查；若建立了任务清单，清单也必须全部完成。检查失败以工具错误回到模型，继续循环。这条规则约束最终产物，不规定工具调用顺序。
 
-循环还在用户取消、运行超时、调用预算耗尽、连续相同调用无进展或模型服务失败时停止。这些结束状态不会伪装成成功。默认预算：24 轮模型调用、80 次工具调用、600 秒；可在配置文件调整。
+循环还在用户取消、运行超时、调用预算耗尽、连续相同调用无进展或模型服务失败时停止。这些结束状态不会伪装成成功。默认预算：24 轮模型请求、30 次工具调用尝试、每轮最多执行 4 次工具、最多 6 次联网调用、600 秒；失败和被拒绝的调用也计入总预算。剩余不超过 20% 时关闭联网工具并提示收尾。可在配置文件调整。
+
+## 过程展示与截断恢复
+
+流式接收模型公开的 assistant content，在整轮工具参数接收完成前即可显示。每轮要求简短中文进度说明；若模型只给出工具调用，则根据真实调用列表显示「执行摘要」，不伪装为模型的思考。私有 reasoning 字段只用于识别等待状态，不存储、不展示内容。流式更新按轮次合并，避免每个片段占用一条轨迹。
+
+长度截断、缺少完成标记、损坏 SSE 或不完整 JSON 都不会触发部分工具执行。整轮输出先通过协议完整性检查，再开始调用工具。一次任务最多自动恢复 2 次；恢复也占用模型轮次和时间预算。提示模型缩小输出并使用分块写入，超过恢复上限明确停止，已执行工具产生的文件留在本机。
+
+`write_file` / `append_file` 每块最多 12000 字符，建议 6000–8000 字符；追加必须给出上次返回的 `characters` 作为 `expectedLength`，重复追加或长度冲突返回错误。交付仍需对完整文件做检查，不接受残缺文档作为成功结果。不能保证外部模型永不截断，但不会执行截断参数或无限重试。
+
+工具结果与展示文本超过限制时有明确截断标记，模型上下文中的长结果使用带 `truncated` 字段的 JSON 摘要。上下文按完整调用组缩减至约 90000 字符以内，并提供最近结果摘录与当前文件列表；不会留下孤立 tool 消息。工具与扩展面板显示配置，执行面板显示实时剩余预算。
 
 ## 工具与传输
 
-- **内置 MCP / in-memory transport**：list_files、read_file、write_file、edit_file、delete_file、search_files、read_webpage、update_tasks、read_memory、write_memory、load_skill、validate_app、complete_task。
+- **内置 MCP / in-memory transport**：list_files、read_file、write_file、append_file、edit_file、delete_file、search_files、read_webpage、update_tasks、read_memory、write_memory、load_skill、validate_app、complete_task。
 - **Exa HTTP MCP**：启动时调用真实 `tools/list` 发现工具，默认开放 web_search_exa / web_fetch_exa（以实际服务返回为准）。使用免费服务通道，可能限流；可通过私有配置增加服务方凭据。
 - **Utilities stdio MCP**：current_time、calculate，仓库内有完整示例服务器。
 - 支持用户在插件清单中声明 **stdio、Streamable HTTP、SSE** MCP 服务。使用官方 TypeScript SDK 处理握手、工具发现和调用。连接失败会明确展示，其他已连接工具仍可运行。
@@ -40,7 +50,7 @@
 ```json
 {
   "plugins": ["./plugins/developer", "./plugins/research", "./plugins/utilities", "/path/to/my-plugin"],
-  "limits": {"maxIterations": 24, "maxToolCalls": 80, "timeoutSeconds": 600}
+  "limits": {"maxIterations": 24, "maxToolCalls": 30, "maxCallsPerTurn": 4, "maxResearchCalls": 6, "maxOutputRetries": 2, "timeoutSeconds": 600}
 }
 ```
 

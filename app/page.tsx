@@ -10,6 +10,7 @@ import { ModelSettings } from '@/components/model-settings';
 import { createAppStateSync } from '@/lib/app-state-sync';
 import { AgentTrace } from '@/components/agent-trace';
 import { ExtensionsPanel } from '@/components/extensions-panel';
+import { mergeAgentEvent } from '@/lib/agent-events';
 import type { AgentEvent } from '@/lib/agent-types';
 
 async function api<T = { ok: boolean }>(path: string, options?: RequestInit) {
@@ -79,7 +80,7 @@ export default function Home() {
   // One-time network/session hydration; setters run after awaited requests.
   useEffect(() => { void initialize(); }, []); // eslint-disable-line react-hooks/exhaustive-deps, react-hooks/set-state-in-effect
   useEffect(() => { if (!toast) return; const t = setTimeout(() => setToast(''), 3600); return () => clearTimeout(t); }, [toast]);
-  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: 'smooth' }); }, [project?.current_version, busy, agentEvents.length]);
+  useEffect(() => { chatEnd.current?.scrollIntoView({ behavior: busy ? 'auto' : 'smooth' }); }, [project?.current_version, busy, agentEvents]);
   useEffect(() => {
     const handler = () => {
       if (busy) return;
@@ -157,7 +158,7 @@ export default function Home() {
       function receive(line: string) {
         if (!line.startsWith('data: ')) return;
         const data = JSON.parse(line.slice(6));
-        if (data.type === 'agent') setAgentEvents(events => { const event = data.event as AgentEvent; const last = events.at(-1); return event.type === 'iteration' && last?.type === 'iteration' && last.iteration === event.iteration ? [...events.slice(0, -1), event] : [...events, event].slice(-400); });
+        if (data.type === 'agent') setAgentEvents(events => mergeAgentEvent(events,data.event as AgentEvent));
         if (data.type === 'error') throw new Error(data.message);
         if (data.type === 'done') completedId = data.projectId;
       }
