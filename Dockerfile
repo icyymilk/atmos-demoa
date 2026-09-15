@@ -1,7 +1,7 @@
 FROM node:22-bookworm-slim AS build
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN --mount=type=cache,id=atmos-npm,target=/root/.npm npm ci --no-audit --no-fund --fetch-timeout=30000 --fetch-retries=2
+RUN npm ci --no-audit --no-fund --fetch-timeout=30000 --fetch-retries=2
 COPY . .
 RUN npm run build
 
