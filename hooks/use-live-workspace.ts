@@ -1,17 +1,17 @@
 'use client';
 import {useCallback,useEffect,useRef,useState} from 'react';
 import {applyWorkspaceEvent,type LiveWorkspaceState,type WorkspaceEvent} from '@/lib/live-workspace';
-export function useLiveWorkspace(projectId:string|undefined,busy:boolean){
+export function useLiveWorkspace(projectId:string|undefined,busy:boolean,ownerId?:string){
   const [live,setLive]=useState<LiveWorkspaceState|null>(null);
-  const storageKey=`atmos:run:${projectId||'new'}`;
+  const storageKey=`atmos:run:${ownerId?ownerId+':':''}${projectId||'new'}`;
   const keyRef=useRef(storageKey);
   const originKey=useRef(storageKey);
   const ticket=useRef(0);
   const fetchSnapshot=useCallback(async(id:string,current:number)=>{
-    const response=await fetch(`/api/runs/${encodeURIComponent(id)}`);if(!response.ok)return;
+    const response=await fetch(`/api/runs/${encodeURIComponent(id)}`,{headers:ownerId?{'X-Atmos-Owner':ownerId}:{}});if(!response.ok)return;
     const snapshot=await response.json() as LiveWorkspaceState;
     if(current===ticket.current)setLive(previous=>previous?.runId===id&&previous.seq>snapshot.seq?previous:{...snapshot,gap:false});
-  },[]);
+  },[ownerId]);
   useEffect(()=>{
     keyRef.current=storageKey;
     const current=++ticket.current;

@@ -17,11 +17,13 @@ export type Skill={id:string;name:string;description:string;plugin:string;conten
 export type Connection={id:string;client:Client;tools:Tool[];close:()=>Promise<void>};
 export type Extensions=Awaited<ReturnType<typeof loadExtensions>>;
 async function json(file:string,fallback:unknown) {try{return JSON.parse(await readFile(file,'utf8'));}catch(error){if((error as NodeJS.ErrnoException).code==='ENOENT')return fallback;throw error;}}
-export async function loadExtensions(root:string) {
+export async function loadExtensions(root:string,owner?:string) {
   const config=await json(path.join(root,'atmos.config.json'),{});
   const local=await json(path.join(root,'atmos.local.json'),{});
   const settings=z.object({plugins:z.array(z.string()).max(20).default([]),limits:z.object({maxIterations:z.number().int().min(1).max(60).default(24),maxToolCalls:z.number().int().min(1).max(200).default(30),maxCallsPerTurn:z.number().int().min(1).max(8).default(4),maxResearchCalls:z.number().int().min(0).max(20).default(6),maxOutputRetries:z.number().int().min(0).max(3).default(2),timeoutSeconds:z.number().int().min(20).max(1800).default(600)}).default({})}).parse({...config,...local,limits:{...config.limits,...local.limits}});
-  const disabled=await json(path.join(root,'.atmos/plugin-state.json'),{});
+  if(owner&&!/^[a-f0-9]{64}$/.test(owner))throw new Error('无效的数据归属。');
+  const defaults=await json(path.join(root,'.atmos/plugin-state.json'),{});
+  const disabled=owner?{...defaults,...await json(path.join(root,'.atmos/owners',owner,'plugin-state.json'),{})}:defaults;
   const plugins:Plugin[]=[],skills:Skill[]=[],errors:{id:string;error:string}[]=[];
   for(const directory of settings.plugins){
     try {
@@ -45,9 +47,9 @@ export async function loadExtensions(root:string) {
   }
   return {plugins,skills,errors,limits:settings.limits};
 }
-export async function setPluginEnabled(root:string,id:string,enabled:boolean){
-  const extensions=await loadExtensions(root);if(!extensions.plugins.some(p=>p.id===id))throw new Error('只能启用或停用已安装插件。');
-  const file=path.join(root,'.atmos/plugin-state.json');const state=await json(file,{});await mkdir(path.dirname(file),{recursive:true});await writeFile(file,JSON.stringify({...state,[id]:enabled},null,2));
+export async function setPluginEnabled(root:string,id:string,enabled:boolean,owner?:string){
+  const extensions=await loadExtensions(root,owner);if(!extensions.plugins.some(p=>p.id===id))throw new Error('只能启用或停用已安装插件。');
+  const file=owner?path.join(root,'.atmos/owners',owner,'plugin-state.json'):path.join(root,'.atmos/plugin-state.json');const state=await json(file,{});await mkdir(path.dirname(file),{recursive:true});await writeFile(file,JSON.stringify({...state,[id]:enabled},null,2));
 }
 export async function connectPlugin(plugin:Plugin,signal:AbortSignal):Promise<Connection|undefined>{
   if(!plugin.enabled||!plugin.mcp)return;

@@ -7,6 +7,7 @@ import { loadExtensions, connectPlugin, setPluginEnabled } from './extensions';
 import { connectCore } from './core-tools';
 import { Workspace } from './workspace';
 import { LiveRun,readRunSnapshot } from './live-run';
+import { passwordOperation, PasswordBusy } from './passwords';
 import { runAgent } from './loop';
 import { ConnectionStore } from './connection-store';
 import { manageConnection, connectExternal } from './connections';
@@ -20,6 +21,8 @@ const connectionBusy=new Set<string>();
 if(!token)throw new Error('Harness requires a per-start authentication token.');
 const inputSchema=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),runId:z.string().uuid().optional(),prompt:z.string().min(1).max(4000),config:z.object({provider:z.string(),model:z.string().min(1).max(150),apiKey:z.string().min(1).max(1000)}),files:z.record(z.string().max(180000)).default({}),history:z.array(z.object({prompt:z.string(),summary:z.string()})).max(8).default([])});
 const active=new Set<string>();
+const identityLocks=new Map<string,{lease:string;expires:number}>();
+function locked(owner:string){const entry=identityLocks.get(owner);if(entry&&entry.expires>Date.now())return true;identityLocks.delete(owner);return false;}
 const liveRuns=new Map<string,LiveRun>();
 const controllers=new Set<AbortController>();
 async function readBody(request:import('node:http').IncomingMessage){let body='';for await(const chunk of request){body+=chunk;if(Buffer.byteLength(body)>1100000)throw new Error('请求过大');}return JSON.parse(body||'{}');}
@@ -29,6 +32,19 @@ const server=createServer(async(request,response)=>{
   response.setHeader('Cache-Control','no-store');
   try{
     if(request.method!=='POST'){response.writeHead(405).end();return;}
+    if(request.url==='/auth/password'){
+      const parsed=z.object({action:z.enum(['hash','verify']),password:z.string().max(512),hash:z.string().max(300).optional()}).safeParse(await readBody(request));
+      if(!parsed.success){response.writeHead(400).end();return;}
+      try{const result=await passwordOperation(parsed.data);response.setHeader('Content-Type','application/json');response.end(JSON.stringify(result));}
+      catch(error){response.writeHead(error instanceof PasswordBusy?429:400,{'Content-Type':'application/json'}).end(JSON.stringify({error:'密码处理未完成。'}));}return;
+    }
+    if(request.url==='/auth/lock'||request.url==='/auth/unlock'){
+      const input=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),lease:z.string().uuid().optional()}).parse(await readBody(request));
+      response.setHeader('Content-Type','application/json');
+      if(request.url==='/auth/unlock'){if(identityLocks.get(input.owner)?.lease===input.lease)identityLocks.delete(input.owner);response.end('{"ok":true}');return;}
+      if(active.has(input.owner)||locked(input.owner)){response.writeHead(409).end('{"error":"工作区正在运行或切换身份。"}');return;}
+      const lease=randomUUID();identityLocks.set(input.owner,{lease,expires:Date.now()+30000});response.end(JSON.stringify({lease}));return;
+    }
     if(request.url==='/connections'){
       const schema=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),action:z.enum(['list','connect','test','disconnect']),provider:z.enum(providers).optional(),token:z.string().max(2000).optional()});
       const parsed=schema.safeParse(await readBody(request));
@@ -41,7 +57,8 @@ const server=createServer(async(request,response)=>{
       finally{connectionBusy.delete(key);}return;
     }
     if(request.url==='/catalog'){
-      const extensions=await loadExtensions(root),abort=new AbortController();response.on('close',()=>abort.abort());
+      const {owner}=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/)}).parse(await readBody(request));
+      const extensions=await loadExtensions(root,owner),abort=new AbortController();response.on('close',()=>abort.abort());
       const catalog:AgentCatalog={available:true,limits:extensions.limits,plugins:[],skills:extensions.skills.map(({id,name,plugin,description})=>({id,name,plugin,description}))};
       const workspace=new Workspace(path.join(root,'.atmos/catalog'));await workspace.init({});const core=await connectCore({workspace,skills:extensions.skills,signal:abort.signal});
       catalog.plugins.push({id:'core',name:'项目工作区',description:'隔离文件、网页、任务、记忆、Skill 与交付工具。',enabled:true,transport:'内置 MCP',tools:core.tools.map(t=>t.name)});await core.close();
@@ -54,7 +71,7 @@ const server=createServer(async(request,response)=>{
       response.setHeader('Content-Type','application/json');response.end(JSON.stringify(catalog));return;
     }
     if(request.url==='/plugins'){
-      const input=z.object({id:z.string(),enabled:z.boolean()}).parse(await readBody(request));await setPluginEnabled(root,input.id,input.enabled);response.setHeader('Content-Type','application/json');response.end('{"ok":true}');return;
+      const input=z.object({id:z.string(),enabled:z.boolean(),owner:z.string().regex(/^[a-f0-9]{64}$/)}).parse(await readBody(request));await setPluginEnabled(root,input.id,input.enabled,input.owner);response.setHeader('Content-Type','application/json');response.end('{"ok":true}');return;
     }
     if(request.url==='/snapshot'){
       const input=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),runId:z.string().uuid()}).parse(await readBody(request));
@@ -62,7 +79,7 @@ const server=createServer(async(request,response)=>{
     }
     if(request.url!=='/run'){response.writeHead(404).end();return;}
     const input=inputSchema.parse(await readBody(request));
-    if(active.has(input.owner)||active.size>=3){response.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:'已有任务运行中，请停止或等待完成后再开始。'}));return;}
+    if(active.has(input.owner)||locked(input.owner)||active.size>=3){response.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:'已有任务运行中，请停止或等待完成后再开始。'}));return;}
     active.add(input.owner);
     const runId=input.runId||randomUUID(),directory=path.join(root,'.atmos/runs',input.owner,runId),workspace=new Workspace(path.join(directory,'workspace'));
     const abort=new AbortController();controllers.add(abort);response.on('close',()=>{if(!response.writableEnded)abort.abort();});request.on('aborted',()=>abort.abort());
@@ -73,7 +90,7 @@ const server=createServer(async(request,response)=>{
     liveRuns.set(`${input.owner}:${runId}`,live);
     let heartbeat:ReturnType<typeof setInterval>|undefined;
     try{
-      await workspace.init(input.files);const extensions=await loadExtensions(root);
+      await workspace.init(input.files);const extensions=await loadExtensions(root,input.owner);
       response.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Accel-Buffering':'no'});
       await live.attach(workspace);
       heartbeat=setInterval(()=>{if(!response.destroyed)response.write(': heartbeat\n\n');},10000);

@@ -1,9 +1,16 @@
 import { sqliteTable, text, integer, index, uniqueIndex } from 'drizzle-orm/sqlite-core';
+export const owners = sqliteTable('owners', { id: text('id').primaryKey(), createdAt: integer('created_at').notNull() });
+export const users = sqliteTable('users', {
+  id: text('id').primaryKey(), ownerId: text('owner_id').notNull().unique().references(() => owners.id),
+  email: text('email').notNull().unique(), name: text('name').notNull(), passwordHash: text('password_hash').notNull(), createdAt: integer('created_at').notNull(),
+});
 export const sessions = sqliteTable('sessions', {
   id: text('id').primaryKey(), name: text('name').notNull(), createdAt: integer('created_at').notNull(),
-});
+  ownerId: text('owner_id').references(() => owners.id), userId: text('user_id').references(() => users.id), expiresAt: integer('expires_at'),
+}, t => [index('idx_sessions_owner').on(t.ownerId), index('idx_sessions_user').on(t.userId)]);
+export const authAttempts = sqliteTable('auth_attempts', { id: text('id').primaryKey(), hits: integer('hits').notNull(), expiresAt: integer('expires_at').notNull() });
 export const projects = sqliteTable('projects', {
-  id: text('id').primaryKey(), owner: text('owner').notNull().references(() => sessions.id),
+  id: text('id').primaryKey(), owner: text('owner').notNull().references(() => owners.id),
   title: text('title').notNull(), currentVersion: integer('current_version').notNull().default(0),
   state: text('state').notNull().default('{}'), createdAt: integer('created_at').notNull(), updatedAt: integer('updated_at').notNull(),
 }, t => [index('idx_projects_owner_updated').on(t.owner, t.updatedAt)]);

@@ -7,10 +7,12 @@ export function createAppStateSync(
   send: (id: string, state: State) => Promise<unknown>,
   notify: (id: string, status: SyncStatus) => void,
   backup: () => Backup | undefined,
+  ownerId?: string,
 ) {
+  let disposed=false,epoch=0;
   const latest = new Map<string, State>();
   const queues = new Map<string, Promise<void>>();
-  const key = (id: string) => `atmos:pending:${id}`;
+  const key = (id: string) => `atmos:pending:${ownerId?ownerId+':':''}${id}`;
   function pending(id: string): State | undefined {
     if (latest.has(id)) return latest.get(id);
     try {
@@ -19,14 +21,17 @@ export function createAppStateSync(
     } catch { /* In-memory saving still works when browser storage is unavailable. */ }
   }
   function save(id: string, state: State) {
+    if(disposed)return Promise.resolve();
+    const revision=epoch;
     latest.set(id, state);
     const encoded = JSON.stringify(state);
     try { backup()?.setItem(key(id), encoded); } catch { /* Best-effort refresh recovery. */ }
     notify(id, '同步中…');
     const job = (queues.get(id) || Promise.resolve()).then(async () => {
+      if(disposed||revision!==epoch)return;
       try {
         await send(id, state);
-        if (latest.get(id) !== state) return;
+        if (disposed || revision!==epoch || latest.get(id) !== state) return;
         latest.delete(id);
         try {
           const storage = backup();
@@ -34,7 +39,7 @@ export function createAppStateSync(
         } catch { /* Do not misreport an acknowledged server save as failed. */ }
         notify(id, '已同步');
       } catch {
-        if (latest.get(id) === state) notify(id, '同步失败，点击重试');
+        if (!disposed && revision===epoch && latest.get(id) === state) notify(id, '同步失败，点击重试');
       }
     });
     queues.set(id, job);
@@ -42,6 +47,8 @@ export function createAppStateSync(
   }
   return {
     pending, save,
+    activate(){disposed=false;},
+    dispose(){disposed=true;epoch++;latest.clear();queues.clear();},
     flush: () => Promise.all(queues.values()),
     forget(id: string) {
       latest.delete(id); queues.delete(id);
