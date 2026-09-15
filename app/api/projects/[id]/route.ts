@@ -1,9 +1,14 @@
+import {historyPage,versionArtifact} from '@/lib/project-history';
 import { ApiError, body, checkOrigin, db, fail, getProject, owner } from '@/lib/storage';
 type Context = { params: Promise<{ id: string }> };
 export async function GET(request: Request, ctx: Context) {
   try {
     const { id } = await ctx.params;
     const project = await getProject(id, await owner(request));
+    if(new URL(request.url).searchParams.get('view')==='progressive'){
+      const page=await historyPage(id,Number(project.current_version)+1,3),latest=await versionArtifact(id,Number(project.current_version));
+      return Response.json({...project,owner:undefined,state:JSON.parse(project.state as string),versions:page.versions.map(v=>v.number===project.current_version?latest:v),historyBefore:page.before,historyTotal:project.current_version},{headers:{'Cache-Control':'no-store'}});
+    }
     const versions = await db().prepare('SELECT * FROM versions WHERE project_id = ? ORDER BY number ASC').bind(id).all();
     return Response.json({ ...project, owner: undefined, state: JSON.parse(project.state as string), versions: versions.results.map(v => ({ ...v, files: JSON.parse(String(v.files || '{}')), trace: JSON.parse(String(v.trace || '[]')) })) }, { headers: { 'Cache-Control': 'no-store' } });
   } catch (e) { return fail(e); }

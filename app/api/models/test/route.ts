@@ -1,16 +1,16 @@
 import { ApiError, body, checkOrigin, fail, owner } from '@/lib/storage';
 import { completion } from '@/lib/generator';
-import { providers, type ModelConfig } from '@/lib/types';
+import { modelConfigSchema } from '@/lib/model-config';
 
 export async function POST(request: Request) {
   try {
     checkOrigin(request);
     await owner(request);
-    const config = await body(request, 2500) as ModelConfig;
-    if (!providers[config.provider as keyof typeof providers] || typeof config.model !== 'string' || !config.model.trim() || config.model.length > 150 || typeof config.apiKey !== 'string' || !config.apiKey.trim() || config.apiKey.length > 1000) throw new ApiError('请填写有效的模型服务、模型名称和 API Key。');
-    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(20000)]);
+    const parsed=modelConfigSchema.safeParse(await body(request,2500));if(!parsed.success)throw new ApiError(parsed.error.issues[0].message);
+    const config=parsed.data;
+    const signal = AbortSignal.any([request.signal, AbortSignal.timeout(60000)]);
     try {
-      await completion(config, 'Reply with only OK.', 'Test connection.', signal, undefined, 16);
+      await completion(config, 'Reply with only OK.', 'Test connection.', signal, undefined, Math.min(config.maxOutputTokens,4096));
     } catch (error) {
       if (signal.aborted) throw new ApiError('连接测试超时或已取消，请检查网络或稍后重试。', 504);
       if (error instanceof ApiError) throw error;

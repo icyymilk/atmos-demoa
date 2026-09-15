@@ -29,7 +29,7 @@ export async function loadExtensions(root:string,owner?:string) {
     try {
       const pluginRoot=await realpath(path.resolve(root,directory));
       const manifest=pluginSchema.parse(await json(path.join(pluginRoot,'plugin.json'),{}));
-      if(['core','memory'].includes(manifest.id))throw new Error('插件 ID 与内置工具冲突');
+      if(['core','memory','context','github','gitlab','notion'].includes(manifest.id))throw new Error('插件 ID 与内置工具冲突');
       if(plugins.some(p=>p.id===manifest.id))throw new Error('插件 ID 重复');
       const plugin={...manifest,root:pluginRoot,enabled:disabled[manifest.id]!==false};plugins.push(plugin);
       if(!plugin.enabled)continue;

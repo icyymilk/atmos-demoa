@@ -1,3 +1,4 @@
+import { generationParameters } from './model-config';
 import { ApiError } from './errors';
 import { providers, type ModelConfig } from './types';
 
@@ -10,7 +11,7 @@ export async function completion(config: ModelConfig, system: string, prompt: st
     // Workers supports manual/follow only. Never follow a redirect with the user's key.
     method: 'POST', signal, redirect: 'manual',
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${config.apiKey}` },
-    body: JSON.stringify({ ...(config.provider === 'deepseek' ? { thinking: { type: 'disabled' } } : config.provider === 'qwen' ? { enable_thinking: false } : {}), model: config.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], stream: true, max_tokens: maxTokens ?? (onDelta ? 14000 : 1200) }),
+    body: JSON.stringify({ ...generationParameters(config,maxTokens ?? (onDelta ? 14000 : 1200)), model: config.model, messages: [{ role: 'system', content: system }, { role: 'user', content: prompt }], stream: true }),
   });
   if (!response.ok) {
     await response.body?.cancel();

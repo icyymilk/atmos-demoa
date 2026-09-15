@@ -1,9 +1,9 @@
 export type AgentEvent = {
-  type: 'activity' | 'budget' | 'run_start' | 'iteration' | 'assistant' | 'tool_start' | 'tool_end' | 'notice' | 'complete' | 'stopped';
+  type: 'approval' | 'guardrail' | 'context' | 'activity' | 'budget' | 'run_start' | 'iteration' | 'assistant' | 'tool_start' | 'tool_end' | 'notice' | 'complete' | 'stopped';
   at: number; iteration?: number; callId?: string; name?: string; text?: string;
   input?: string; output?: string; ok?: boolean; durationMs?: number; reason?: string;
   tools?: number; runId?: string; streaming?: boolean;
-  used?: number; limit?: number; researchUsed?: number; researchLimit?: number;
+  approval?: import('./trust-types').ApprovalRequest; contextCharacters?: number; used?: number; limit?: number; researchUsed?: number; researchLimit?: number;
 };
 export type AgentCatalog = {
   available: boolean;

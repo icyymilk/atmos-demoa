@@ -64,7 +64,7 @@ test('known access tokens are rejected; MCP proposals also reject the active arb
 }));
 test('recall bounds document context and history, read supports exact continuation',()=>temporary(async store=>{
  for(let i=0;i<6;i++)await store.action(a,memoryAction.parse({...create(`long/${i}.md`,'长'.repeat(12000)),pinned:true}));
- for(let i=0;i<22;i++){const recall=await store.recall(a,'长',String(i));assert.ok(recall.text.length<9000);assert.ok(recall.documents.length<=4);}
+ for(let i=0;i<22;i++){const recall=await store.recall(a,'长',String(i));assert.ok(recall.text.length<4500);assert.ok(recall.documents.length<=7);}
  const v=await store.get(a);assert.equal(v.recalls.length,20);
  const read=await store.read(a,v.documents[2].id,11000,2000);assert.equal(read.content.length,1000);assert.equal('truncated' in read&&read.truncated,false);
 }));

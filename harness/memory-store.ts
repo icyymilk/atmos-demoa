@@ -79,8 +79,8 @@ export class MemoryStore{
   const eligible=v.documents.filter(d=>d.enabled&&d.content.replace(/^#+.*$/gm,'').trim());
   const pinned=eligible.filter(d=>d.pinned).sort((a,b)=>Number(['USER.md','MEMORY.md'].includes(b.path))-Number(['USER.md','MEMORY.md'].includes(a.path))).slice(0,4);
   const ranked=rankMemories(eligible.filter(d=>!pinned.includes(d)),query).slice(0,3).map(x=>x.doc);
-  const chosen=[...pinned,...ranked];let remaining=8000;const selected:MemoryDocument[]=[];const chunks:string[]=[];
-  for(const d of chosen){if(remaining<=0)break;const chunk=d.content.slice(0,Math.min(2000,remaining));chunks.push(`### ${d.path}（版本 ${d.revision}）\n${chunk}${chunk.length<d.content.length?'\n[节选，可通过记忆工具读取完整内容]':''}`);remaining-=chunk.length;selected.push(d);}
+  const chosen=[...pinned,...ranked];let remaining=3200;const selected:MemoryDocument[]=[];const chunks:string[]=[];
+  for(const d of chosen){if(remaining<=0)break;const chunk=d.content.slice(0,Math.min(d.pinned?600:240,remaining));chunks.push(`### ${d.path}（版本 ${d.revision}）\n${chunk}${chunk.length<d.content.length?'\n[首层节选，完整内容请通过 memory__read 按需读取]':''}`);remaining-=chunk.length;selected.push(d);}
   const documents=selected.map(({id,path,revision})=>({id,path,revision}));v.recalls.unshift({at:Date.now(),runId,query:redact(query).slice(0,300),documents});v.recalls=v.recalls.slice(0,20);
   return {text:chunks.join('\n\n'),documents};
  });}

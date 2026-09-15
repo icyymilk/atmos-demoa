@@ -1,0 +1,3 @@
+import {ApiError,body,checkOrigin,fail,owner} from '@/lib/storage';
+import {harnessRequest} from '@/lib/harness-client';
+export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){try{checkOrigin(request);const user=await owner(request),{id}=await params;if(!/^[a-f0-9-]{36}$/.test(id))throw new ApiError('无效运行标识');const input=await body(request,1000);const response=await harnessRequest('/approval',{owner:user,runId:id,id:input.id,decision:input.decision},request.signal);return new Response(response.body,{status:response.status,headers:{'Content-Type':'application/json','Cache-Control':'no-store'}});}catch(e){return fail(e);}}

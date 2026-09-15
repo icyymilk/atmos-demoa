@@ -1,6 +1,6 @@
 import { ApiError, body, checkOrigin, db, fail, getProject, owner } from '@/lib/storage';
 import { templateApp } from '@/lib/templates';
-import { providers, type ModelConfig } from '@/lib/types';
+import { modelConfigSchema } from '@/lib/model-config';
 import { harnessRequest } from '@/lib/harness-client';
 import type { AgentEvent } from '@/lib/agent-types';
 
@@ -11,15 +11,16 @@ export async function POST(request:Request){
     if(typeof input.prompt!=='string'||!input.prompt.trim()||input.prompt.length>4000)throw new ApiError('请填写 1–4000 个字符的应用需求。');
     const prompt=input.prompt.trim(),mode=input.mode==='template'?'template':'ai';
     if(mode==='template'&&input.projectId)throw new ApiError('模板用于创建示例，请连接模型后修改现有应用。');
-    const config:ModelConfig={provider:input.provider,model:input.model,apiKey:input.apiKey};
-    if(mode==='ai'&&(!Object.hasOwn(providers,config.provider)||typeof config.apiKey!=='string'||!config.apiKey.trim()||config.apiKey.length>1000||typeof config.model!=='string'||!config.model.trim()||config.model.length>150))throw new ApiError('请先配置模型服务、模型名称和 API Key。');
+    const parsed=mode==='ai'?modelConfigSchema.safeParse(input):null;
+    if(parsed&&!parsed.success)throw new ApiError(parsed.error.issues[0].message);
+    const config=parsed?.success?parsed.data:undefined;
     const project=input.projectId?await getProject(input.projectId,user):null;
     if(project&&Number(project.current_version)>=40)throw new ApiError('此项目已达到 40 个版本的体验上限，请导出源码或新建项目。');
     if(project&&input.baseVersion!==project.current_version)throw new ApiError('项目已更新，请刷新后再生成。',409);
     const count=await db().prepare('SELECT COUNT(*) AS n FROM projects WHERE owner = ?').bind(user).first<{n:number}>();
     if(!project&&(count?.n||0)>=50)throw new ApiError('最多保存 50 个项目，请先删除不需要的项目。');
     const previous=project?await db().prepare('SELECT code, files FROM versions WHERE project_id = ? AND number = ?').bind(project.id,project.current_version).first<{code:string;files:string}>():null;
-    const history=project?(await db().prepare('SELECT prompt, summary FROM versions WHERE project_id = ? ORDER BY number DESC LIMIT 5').bind(project.id).all()).results.reverse():[];
+    const history=project?(await db().prepare('SELECT number, prompt, summary FROM versions WHERE project_id = ? ORDER BY number DESC LIMIT 40').bind(project.id).all()).results.reverse():[];
     const disconnect=new AbortController(),signal=AbortSignal.any([request.signal,disconnect.signal]);
     const encoder=new TextEncoder();
     const stream=new ReadableStream({

@@ -19,7 +19,9 @@
     "db:setup": "node scripts/setup-local-db.mjs",
     "prestart": "node scripts/setup-local-db.mjs",
     "test:auth": "node --import tsx tests/auth-integration.mjs",
-    "test:memory": "node --import tsx tests/memory-integration.mjs"
+    "test:memory": "node --import tsx tests/memory-integration.mjs",
+    "test:controls": "node tests/controls-integration.mjs",
+    "test:guard": "node tests/guard-integration.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",

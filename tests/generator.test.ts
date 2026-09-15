@@ -14,7 +14,7 @@ test('streaming API correctly reconstructs split UTF-8 and SSE events', async ()
   globalThis.fetch=async (_url,options)=>{
     assert.equal(new Headers(options?.headers).get('Authorization'),'Bearer unit-test-only');
     assert.equal(options?.redirect, 'manual');
-    assert.equal(JSON.parse(String(options?.body)).thinking.type,'disabled');
+    assert.equal(JSON.parse(String(options?.body)).thinking,undefined);
     return new Response(new ReadableStream({start(c){for(let i=0;i<bytes.length;i+=7)c.enqueue(bytes.slice(i,i+7));c.close();}}));
   };
   try {assert.equal(await completion(config,'system','prompt',new AbortController().signal),'你好，世界。');}

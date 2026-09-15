@@ -1,0 +1,3 @@
+import {ApiError,fail,getProject,owner} from '@/lib/storage';
+import {historyPage} from '@/lib/project-history';
+export async function GET(request:Request,{params}:{params:Promise<{id:string}>}){try{const {id}=await params;await getProject(id,await owner(request));const url=new URL(request.url),before=Number(url.searchParams.get('before')),limit=Number(url.searchParams.get('limit')||5);if(!Number.isInteger(before)||before<1||!Number.isInteger(limit)||limit<1||limit>10)throw new ApiError('分页参数无效。');return Response.json(await historyPage(id,before,limit),{headers:{'Cache-Control':'no-store'}});}catch(e){return fail(e);}}

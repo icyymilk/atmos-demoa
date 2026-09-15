@@ -1,0 +1,11 @@
+'use client';
+import {useEffect,useState} from 'react';
+import {ShieldAlert,Check,X,Loader2} from 'lucide-react';
+import {trustLabels,type ApprovalRequest} from '@/lib/trust-types';
+export function ApprovalCard({approval,live,ownerId}:{approval:ApprovalRequest;live:boolean;ownerId?:string}){
+ const [busy,setBusy]=useState(false),[error,setError]=useState(''),[expired,setExpired]=useState(false),[submitted,setSubmitted]=useState(false);
+ useEffect(()=>{const timer=setTimeout(()=>setExpired(true),Math.max(0,approval.expiresAt-Date.now()));return()=>clearTimeout(timer);},[approval.expiresAt]);
+ const pending=approval.status==='pending'&&live&&!expired&&!submitted;
+ async function decide(decision:'allow'|'deny'){setBusy(true);setError('');try{const response=await fetch(`/api/runs/${approval.runId}/approval`,{method:'POST',headers:{'Content-Type':'application/json',...(ownerId?{'X-Atmos-Owner':ownerId}:{})},body:JSON.stringify({id:approval.id,decision})}),data=await response.json() as {error?:string};if(!response.ok)throw new Error(data.error||'审批未提交');setSubmitted(true);}catch(e){setError((e as Error).message);}finally{setBusy(false);}}
+ return <div className={`approval-card ${pending?'pending':''}`}><div className="approval-heading"><ShieldAlert size={18}/><strong>{pending?'需要你的决定':approval.status==='approved'?'已批准':approval.status==='denied'?'已拒绝':submitted?'决定已提交':'审批已结束'}</strong><small>{trustLabels[approval.mode]}</small></div><p>{approval.subject==='reply'?'Agent 准备提供以下命令建议；批准仅允许展示建议，不会直接执行。':'Agent 准备调用以下工具；批准后仅执行这一次原始操作。'}</p><code>{approval.name}</code><ul>{(approval.reasons.length?approval.reasons:['当前模式要求每次工具调用都询问']).map(reason=><li key={reason}>{reason}</li>)}</ul><details open={pending}><summary>查看完整操作内容</summary><pre>{approval.input}</pre></details><small className="approval-hash">操作指纹 {approval.fingerprint.slice(0,16)} · 等待上限 5 分钟</small>{error&&<p role="alert" className="approval-error">{error}</p>}{pending&&<div className="approval-actions"><button className="secondary-button" disabled={busy} onClick={()=>void decide('deny')}><X size={14}/>拒绝</button><button className="primary-button" disabled={busy||!ownerId} onClick={()=>void decide('allow')}>{busy?<Loader2 size={14} className="spin"/>:<Check size={14}/>}批准这一次</button></div>}</div>;
+}
