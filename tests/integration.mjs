@@ -9,6 +9,16 @@ const b = await call('/api/session', {data:{name:'隔离会话'}}); const other 
 assert.match(a.headers.get('set-cookie'), /HttpOnly/);
 assert.equal((await call('/api/projects')).status, 401);
 assert.equal((await call('/api/harness')).status, 401);
+assert.equal((await call('/api/connections')).status, 401);
+assert.deepEqual(await (await call('/api/connections', {cookie})).json(), {connections:[]});
+assert.deepEqual(await (await call('/api/connections', {cookie:other})).json(), {connections:[]});
+assert.equal((await call('/api/connections', {cookie, data:{action:'connect',provider:'github',token:'test-token'},extra:{Origin:'https://untrusted.example'}})).status,403);
+assert.equal((await call('/api/connections', {cookie, data:{action:'connect',provider:'unsupported',token:'not-secret'}})).status,400);
+assert.equal((await call('/api/connections', {cookie, data:{action:'connect',provider:'github',token:'short'}})).status,400);
+assert.equal((await call('/api/connections', {cookie, data:{action:'disconnect',provider:'github'}})).status,200);
+const invalidExternal=await call('/api/connections', {cookie, data:{action:'connect',provider:'github',token:'invalid-external-test-token'}});
+assert.equal(invalidExternal.status,400);assert.match(await invalidExternal.text(), /令牌无效/);
+assert.deepEqual(await (await call('/api/connections', {cookie})).json(), {connections:[]});
 const ids = [];
 try {
   for (const templateId of ['board','expense','focus']) {

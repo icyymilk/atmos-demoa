@@ -11,7 +11,7 @@ import { clipped } from '../lib/agent-events';
 
 export class AgentStopped extends Error {constructor(readonly reason:string,message:string){super(message);}}
 export type RunInput={prompt:string;config:ModelConfig;history?:{prompt:string;summary:string}[]};
-export type RunOptions={workspace:Workspace;extensions:Extensions;signal:AbortSignal;emit:(event:AgentEvent)=>void;turn?:typeof modelTurn;runId?:string;workspaceEvent?:(event:WorkspacePayload)=>void};
+export type RunOptions={workspace:Workspace;extensions:Extensions;signal:AbortSignal;emit:(event:AgentEvent)=>void;turn?:typeof modelTurn;runId?:string;workspaceEvent?:(event:WorkspacePayload)=>void;connectExternal?:(signal:AbortSignal)=>Promise<Connection[]>};
 export function buildContext(base:Message[],turns:Message[][]):Message[]{
   const keep=turns.slice();
   while(keep.length>0&&(keep.length>8||JSON.stringify(keep).length>90000))keep.shift();
@@ -29,6 +29,7 @@ export async function runAgent(input:RunInput,options:RunOptions):Promise<Comple
   const budget=(iteration:number)=>send({type:'budget',iteration,used:toolCount,limit:limits.maxToolCalls,researchUsed:researchCount,researchLimit});
   try{
     connections.push(await connectCore(ctx));
+    if(options.connectExternal)connections.push(...await options.connectExternal(signal));
     const loaded=await Promise.allSettled(extensions.plugins.map(p=>connectPlugin(p,signal)));
     loaded.forEach((result,i)=>{if(result.status==='fulfilled'&&result.value)connections.push(result.value);else if(result.status==='rejected')send({type:'notice',text:`插件 ${extensions.plugins[i].name} 暂不可用：${signal.aborted?'连接已取消':'MCP 连接或工具发现失败'}`});});
     for(const error of extensions.errors)send({type:'notice',text:`插件加载失败：${error.id} · ${error.error}`});

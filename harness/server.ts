@@ -8,10 +8,15 @@ import { connectCore } from './core-tools';
 import { Workspace } from './workspace';
 import { LiveRun,readRunSnapshot } from './live-run';
 import { runAgent } from './loop';
+import { ConnectionStore } from './connection-store';
+import { manageConnection, connectExternal } from './connections';
+import { providers } from '../lib/connection-types';
 import { mergeAgentEvent, clipped } from '../lib/agent-events';
 import type { AgentEvent, AgentCatalog } from '../lib/agent-types';
 
 const root=process.cwd(),token=process.env.ATMOS_HARNESS_TOKEN;
+const connectionStore=new ConnectionStore(root);
+const connectionBusy=new Set<string>();
 if(!token)throw new Error('Harness requires a per-start authentication token.');
 const inputSchema=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),runId:z.string().uuid().optional(),prompt:z.string().min(1).max(4000),config:z.object({provider:z.string(),model:z.string().min(1).max(150),apiKey:z.string().min(1).max(1000)}),files:z.record(z.string().max(180000)).default({}),history:z.array(z.object({prompt:z.string(),summary:z.string()})).max(8).default([])});
 const active=new Set<string>();
@@ -24,6 +29,17 @@ const server=createServer(async(request,response)=>{
   response.setHeader('Cache-Control','no-store');
   try{
     if(request.method!=='POST'){response.writeHead(405).end();return;}
+    if(request.url==='/connections'){
+      const schema=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),action:z.enum(['list','connect','test','disconnect']),provider:z.enum(providers).optional(),token:z.string().max(2000).optional()});
+      const parsed=schema.safeParse(await readBody(request));
+      if(!parsed.success){response.writeHead(400,{'Content-Type':'application/json'}).end(JSON.stringify({error:'连接参数格式无效。'}));return;}
+      const input=parsed.data,key=`${input.owner}:${input.provider||'list'}`;
+      if(connectionBusy.has(key)){response.writeHead(409,{'Content-Type':'application/json'}).end(JSON.stringify({error:'此连接正在更新，请稍后重试。'}));return;}
+      const abort=new AbortController();response.on('close',()=>abort.abort());
+      connectionBusy.add(key);
+      try{const result=await manageConnection(connectionStore,input.owner,input,abort.signal);response.setHeader('Content-Type','application/json');response.end(JSON.stringify(result));}
+      finally{connectionBusy.delete(key);}return;
+    }
     if(request.url==='/catalog'){
       const extensions=await loadExtensions(root),abort=new AbortController();response.on('close',()=>abort.abort());
       const catalog:AgentCatalog={available:true,limits:extensions.limits,plugins:[],skills:extensions.skills.map(({id,name,plugin,description})=>({id,name,plugin,description}))};
@@ -61,7 +77,10 @@ const server=createServer(async(request,response)=>{
       response.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Accel-Buffering':'no'});
       await live.attach(workspace);
       heartbeat=setInterval(()=>{if(!response.destroyed)response.write(': heartbeat\n\n');},10000);
-      const result=await runAgent(input,{workspace,extensions,signal:abort.signal,runId,workspaceEvent:event=>live.event(event),emit:event=>{const safe=JSON.parse(redact(JSON.stringify(event))) as AgentEvent;trace=mergeAgentEvent(trace,{...safe,input:safe.input?clipped(safe.input,600):undefined,output:safe.output?clipped(safe.output,1400):undefined});emit({type:'agent',event:safe});}});
+      const result=await runAgent(input,{workspace,extensions,signal:abort.signal,runId,connectExternal:async signal=>{
+        const statuses=await connectionStore.list(input.owner);
+        return Promise.all(statuses.map(status=>connectExternal(connectionStore,input.owner,status.provider,signal)));
+      },workspaceEvent:event=>live.event(event),emit:event=>{const safe=JSON.parse(redact(JSON.stringify(event))) as AgentEvent;trace=mergeAgentEvent(trace,{...safe,input:safe.input?clipped(safe.input,600):undefined,output:safe.output?clipped(safe.output,1400):undefined});emit({type:'agent',event:safe});}});
       await writeFile(path.join(directory,'run.json'),redact(JSON.stringify({runId,status:'completed',trace,title:result.title,summary:result.summary},null,2)));
       await live.finish('completed');
       emit({type:'result',...result,trace});
