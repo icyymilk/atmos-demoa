@@ -2,12 +2,12 @@
 
 ## 提交入口
 
-- 正式在线 Demo：**待填入通过验收的网址**。
-- GitHub public 源码：**待填入公开仓库地址**。
+- 正式在线 Demo：[https://atmos-production-d92c.up.railway.app](https://atmos-production-d92c.up.railway.app)。
+- GitHub public 源码：[https://github.com/icyymilk/atmos-demoa](https://github.com/icyymilk/atmos-demoa)。
 - 本地体验：`npm ci` → `npm run dev` → `http://localhost:5173`。
 - 单实例部署：[部署说明](DEPLOYMENT.md)，含 Docker、HTTPS 与持久化配置。
 
-旧 Sites 站点未包含当前 Node Agent 运行层，不能作为这版最终链接。提交前须在无痕浏览器验证这两个正式链接；本文件内的待填项不能作为最终回收结果。
+正式 Demo 运行完整 Node Agent、Worker API 与持久化数据库。已从未登录环境验证源码仓库可访问，并在线完成健康检查、模板创建、状态保存、服务重启后读取及测试数据清理。
 
 ## 产品定位与实现思路
 
@@ -53,6 +53,6 @@ Atmos 是一个通过自然语言创建、迭代网页应用的 Agent 工作台�
 - 稳定 owner 与登录会话分离，使注册继承、项目隔离和跨项目记忆可复用。
 - 首层摘要与按需检索控制上下文体积；审批绑定具体操作，用户拒绝后由 Agent 选择替代路径。
 
-后续优先级：P0 完成正式公网/真实模型质量回归与基础运行监控；P1 邮件验证/找回、运行配额、任务队列、断线恢复；P2 多文件工程执行器、自动浏览器修复、GitHub 写入同步与独立应用发布。
+后续优先级：P0 完成有效模型 Key 的质量回归与基础运行监控；P1 邮件验证/找回、运行配额、任务队列、断线恢复；P2 多文件工程执行器、自动浏览器修复、GitHub 写入同步与独立应用发布。
 
 产品边界参考 [Atoms 项目范围与能力](https://help.atoms.dev/zh/articles/12129503-project-scope-capabilities)。Atmos 是独立实现的挑战 Demo，不是 Atoms 官方产品。

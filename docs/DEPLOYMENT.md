@@ -2,6 +2,25 @@
 
 目前应用由两个进程组成：编译后的 Worker 网页/API 与 Node Agent Harness。只上传前端静态文件或只发布 Worker，会缺失生成、密码处理、记忆和 MCP 能力。此前 Sites 地址不作为这版的验收入口。
 
+## 当前 Railway 部署
+
+正式 Demo 运行于 [https://atmos-production-d92c.up.railway.app](https://atmos-production-d92c.up.railway.app)。Railway 从仓库根目录 Dockerfile 构建单个服务，并将 HTTPS 域名路由到平台注入的 `PORT`（当前为 8080）。服务变量如下：
+
+```text
+ATMOS_PUBLIC_ORIGIN=https://atmos-production-d92c.up.railway.app
+ATMOS_LOCAL_STATE_DIR=/app/.atmos/database
+RAILWAY_RUN_UID=0
+RAILWAY_DEPLOYMENT_DRAINING_SECONDS=30
+```
+
+Railway 每个服务只挂一个卷，因此 `/app/.atmos` 同时保存 Agent 文件、账户记忆、连接凭据和位于 `database/` 下的 SQLite/D1 数据。卷必须在创建账户或项目之前挂载。线上更新使用 `railway up --service atmos`，域名的目标端口必须与运行时 `PORT` 一致；发布后检查：
+
+```sh
+curl --fail https://atmos-production-d92c.up.railway.app/api/health
+```
+
+当前已验证健康响应、首页、访客模板创建、应用状态保存、服务重启后读取及测试项目清理。Railway 项目仍是单副本，不能启用共享写入的多副本扩缩容。
+
 ## 单实例部署
 
 仓库提供 Dockerfile 和 `deploy/compose.yaml`。这是一套单机 Demo 部署：Node 22、编译后 Worker 的本地运行器、Node Harness、Caddy HTTPS 入口。本地 D1/SQLite 与 Agent 数据使用持久卷；不依赖开发者的本机文件或 API Key。运行器基于 Wrangler/Miniflare，适合受控 Demo，后续生产化应替换为独立 Node API + SQLite/Postgres 或真正的云端 Worker + 独立 Agent 服务。

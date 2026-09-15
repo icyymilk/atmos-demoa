@@ -6,7 +6,7 @@
 
 ## 交付状态
 
-**当前以本地版本为验收入口。** 最终提交所需的正式公网地址和 GitHub public 仓库尚待指定。旧 Sites 部署不包含当前 Node Agent 运行层，不能作为这版验收结果。单实例部署、HTTPS 入口和持久化配置见 [部署说明](docs/DEPLOYMENT.md)。
+**正式 Demo：** [https://atmos-production-d92c.up.railway.app](https://atmos-production-d92c.up.railway.app)；**公开源码：** [https://github.com/icyymilk/atmos-demoa](https://github.com/icyymilk/atmos-demoa)。线上实例已验证健康检查、模板创建、状态保存和服务重启后的数据持久化。部署结构、HTTPS 入口和持久化配置见 [部署说明](docs/DEPLOYMENT.md)。
 
 可直接使用的 [提交说明](docs/SUBMISSION.md) 与 [验收矩阵](docs/RELEASE-CHECKLIST.md) 已整理；公网与有效模型 Key 验收必须通过后再填写正式链接。
 
@@ -32,7 +32,7 @@
 | --- | --- |
 | UI | React 19、TypeScript、手写 CSS、Lucide 图标 |
 | 全栈框架 | Vinext / Vite，Next.js App Router 风格 |
-| 部署 | Cloudflare Workers，经 Sites 发布 |
+| 部署 | Docker 化 Node 22 服务；Railway HTTPS 与持久卷 |
 | 数据 | Cloudflare D1（SQLite）、Drizzle schema / migrations、参数化 SQL |
 | 智能体运行层 | Node.js Harness，自主工具循环、上下文管理、预算与交付检查 |
 | 工具与扩展 | 官方 MCP TypeScript SDK、stdio / HTTP / SSE、plugin.json、SKILL.md |
@@ -131,7 +131,7 @@ sequenceDiagram
 5. 没有生产级的滥用检测、IP 限流、账号恢复、后台任务队列或自动扩缩容策略。
 6. 预览基于浏览器沙箱，不能中断生成代码中的无限循环。高风险的任意代码执行需进一步使用独立源与容器资源隔离。
 7. 对话携带近期需求和回复、版本文件及项目记忆；尚未实现并行多 Agent、后台队列或停止任务的一键恢复。
-8. 当前 Harness 面向本地 Node 运行；旧 Sites 公网部署不包含这一运行层，云端迁移需单独安排。
+8. 当前公网实例是带本地 SQLite/D1 与文件卷的单副本 Node 服务；不支持多副本共享写入，扩容前需迁移到外部事务数据库和对象存储。
 
 ## 后续优先级
 
