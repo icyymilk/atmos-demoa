@@ -39,6 +39,7 @@ const server=createServer(async(request,response)=>{
   response.setHeader('Cache-Control','no-store');
   try{
     if(request.method!=='POST'){response.writeHead(405).end();return;}
+    if(request.url==='/health'){response.setHeader('Content-Type','application/json');response.end('{"ok":true}');return;}
     if(request.url==='/auth/password'){
       const parsed=z.object({action:z.enum(['hash','verify']),password:z.string().max(512),hash:z.string().max(300).optional()}).safeParse(await readBody(request));
       if(!parsed.success){response.writeHead(400).end();return;}

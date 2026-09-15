@@ -6,6 +6,8 @@ export const projectRoot = fileURLToPath(new URL("../", import.meta.url));
 const runtimeRoot = process.env.SITES_RUNTIME_ROOT || path.join(projectRoot, ".sites-runtime");
 
 process.env.CLOUDFLARE_CF_FETCH_ENABLED ||= "false";
+// Avoid an unnecessary online update check keeping one-shot migration commands alive.
+process.env.WRANGLER_HIDE_BANNER ||= "true";
 process.env.WRANGLER_SEND_METRICS ||= "false";
 process.env.WRANGLER_WRITE_LOGS ||= "false";
 process.env.WRANGLER_LOG_PATH ||= path.join(runtimeRoot, "wrangler/logs");

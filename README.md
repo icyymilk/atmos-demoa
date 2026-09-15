@@ -6,11 +6,13 @@
 
 ## 交付状态
 
-**当前以本地版本为验收入口。** 公开部署地址：[Atmos Demo](https://atmos-builder-cyx.pale-earth-3846.chatgpt.site)。平台已报告部署成功，但当前执行环境访问该域名触发 Cloudflare 403，尚未完成外网可访问性验收。可先使用下方本地运行步骤体验。GitHub public 仓库待指定。
+**当前以本地版本为验收入口。** 最终提交所需的正式公网地址和 GitHub public 仓库尚待指定。旧 Sites 部署不包含当前 Node Agent 运行层，不能作为这版验收结果。单实例部署、HTTPS 入口和持久化配置见 [部署说明](docs/DEPLOYMENT.md)。
+
+可直接使用的 [提交说明](docs/SUBMISSION.md) 与 [验收矩阵](docs/RELEASE-CHECKLIST.md) 已整理；公网与有效模型 Key 验收必须通过后再填写正式链接。
 
 ## 已实现
 
-- 天蓝色中文创作首页、示例模板、项目列表与搜索；桌面双栏工作台、手机对话/应用切换。
+- 天蓝色中文创作首页、示例模板、项目列表与搜索；系统字体、统一线性图标、可收起侧栏、桌面双栏工作台、手机对话/应用切换。支持键盘快捷键、焦点返回、减少动态效果和服务健康检查。
 - Canvas 粒子轨道与鼠标轻交互；支持手动暂停、系统减少动态效果，并在页面隐藏或粒子区域离屏时停止绘制。
 - DeepSeek、OpenAI、OpenRouter、通义千问四种 OpenAI 兼容服务，可修改模型 ID；支持真实短请求测试连接、配置取消与服务偏好记忆（不记忆 Key）。
 - Agent Harness：模型决策 → MCP 工具执行 → 工具结果回传 → 继续决策，直到交付检查通过或达到停止条件。无固定阶段或固定修复次数。
@@ -234,3 +236,14 @@ Atmos 为独立挑战 Demo，不是 Atoms 官方产品。
 接口：`GET/POST /api/security`、`POST /api/runs/:id/approval`、`POST /api/models/list`、`GET /api/projects/:id/history?before=...`、`GET /api/projects/:id/versions/:number`。
 
 验证命令增加 `npm run test:controls`（真实本地鉴权/分页/参数接口）与 `npm run test:guard`（独立临时 Harness、真实 HTTP + MCP 副作用、模型决策用测试夹具）。单元测试验证 ZIP 可被 Python zipfile 解压校验、推理参数映射与私有协议隔离、上下文边界、审批拒绝/过期/防重放。浏览器检查覆盖完整下载、懒加载旧版本、模型设置、信任持久化、桌面和手机审批交互；模型列表及实时审批流使用浏览器夹具，实际执行安全由独立 Harness 测试验证。测试不使用或打印用户真实 Key。
+
+
+## 交付打磨与检查
+
+界面按 Apple HIG 的可读性、层级和一致性原则调整：使用操作系统字体（不打包 Apple 字体）、统一 Lucide 图标线宽和尺寸，减少装饰性字符，保持天蓝色强调、浅色导航、稳定工具栏。正文与辅助文字按层级调大并提高对比度。支持侧栏收起、手机导航焦点约束、原生 dialog、Esc 与返回焦点；⌘ / Ctrl + K 聚焦输入，⌘ / Ctrl + , 配置模型，⌘ / Ctrl + \ 切换侧栏。
+
+参考：[Apple Typography](https://developer.apple.com/design/human-interface-guidelines/typography)、[Sidebars](https://developer.apple.com/design/human-interface-guidelines/sidebars)、[Design principles](https://developer.apple.com/design/human-interface-guidelines/design-principles)。这是 Web 端对指南原则的应用，不是原生 macOS 控件或官方认证。
+
+`npm run check` 运行类型检查、Lint、单元测试和构建。`npm run test:ui` 提供可复现的浏览器流程；首次先 `npx playwright install chromium`，或用 `ATMOS_BROWSER_CHANNEL=chrome` 指定本机 Chrome。`npm run test:deployment` 在编译后服务上使用干净数据库，验证 HTTPS 来源检查、Secure Cookie、账户和重启后的持久化。
+
+数据库初始化关闭 Wrangler 的在线版本提示，避免迁移已经完成但更新请求仍占用进程导致启动停住。`GET /api/health` 同时检查数据库与 Node Harness，任一未就绪返回 503；不会返回账户、凭据或内部运行目录。

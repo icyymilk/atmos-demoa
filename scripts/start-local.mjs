@@ -7,15 +7,18 @@ const serverRoot = path.join(projectRoot, 'dist/server');
 let config;
 try { config = JSON.parse(await readFile(path.join(serverRoot, 'wrangler.json'), 'utf8')); }
 catch { console.error('请先运行 npm run build。'); process.exit(1); }
+const publicOrigin=process.env.ATMOS_PUBLIC_ORIGIN;
+if(publicOrigin){const url=new URL(publicOrigin);if(!['http:','https:'].includes(url.protocol)||url.origin!==publicOrigin)throw new Error('ATMOS_PUBLIC_ORIGIN must be a full http(s) origin without a trailing slash.');}
 const harness = await startHarness();
 config.main = path.resolve(serverRoot, config.main);
 if (config.assets) config.assets.directory = path.resolve(serverRoot, config.assets.directory);
-config.vars = { ...config.vars, ATMOS_HARNESS_URL: process.env.ATMOS_HARNESS_URL, ATMOS_HARNESS_TOKEN: process.env.ATMOS_HARNESS_TOKEN };
+config.vars = { ...config.vars, ATMOS_HARNESS_URL: process.env.ATMOS_HARNESS_URL, ATMOS_HARNESS_TOKEN: process.env.ATMOS_HARNESS_TOKEN, ...(publicOrigin?{ATMOS_PUBLIC_ORIGIN:publicOrigin}:{}) };
 const localConfig = path.join(projectRoot, '.atmos', `worker-${process.pid}.json`);
 await mkdir(path.dirname(localConfig), { recursive: true });
 await writeFile(localConfig, JSON.stringify(config), { mode: 0o600 });
-const worker = spawn(process.execPath, [path.join(projectRoot,'node_modules/wrangler/bin/wrangler.js'),'dev','--config',localConfig,'--local','--persist-to',path.join(projectRoot,'.wrangler/state'),'--ip','127.0.0.1','--inspector-port','0','--log-level','warn',...process.argv.slice(2)], { stdio:'inherit', env:process.env });
+const worker = spawn(process.execPath, [path.join(projectRoot,'node_modules/wrangler/bin/wrangler.js'),'dev','--config',localConfig,'--local','--persist-to',path.resolve(process.env.ATMOS_LOCAL_STATE_DIR||path.join(projectRoot,'.wrangler/state')),'--ip',process.env.ATMOS_HOST||'127.0.0.1','--port',process.env.PORT||'8787','--inspector-port','0','--log-level','warn',...process.argv.slice(2)], { stdio:'inherit', env:process.env });
 const stop=()=>{worker.kill();harness.kill();};
+harness.once('exit',()=>worker.kill());
 process.on('SIGINT',stop);process.on('SIGTERM',stop);
 worker.once('exit',async code=>{harness.kill();await unlink(localConfig).catch(()=>{});process.exit(code??0);});
 worker.once('error',async error=>{console.error(error.message);harness.kill();await unlink(localConfig).catch(()=>{});process.exit(1);});

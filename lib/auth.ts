@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ApiError, body, checkOrigin, cookieToken, db, fail, hashToken, owner, session } from './storage';
+import { ApiError, body, checkOrigin, cookieToken, db, fail, hashToken, owner, session, publicOrigin } from './storage';
 import { harnessRequest } from './harness-client';
 import type { Identity, Session } from './auth-types';
 export const sessionDuration=2592000000;
@@ -8,7 +8,7 @@ export function publicIdentity(current:Session):Identity {
   return {kind:current.kind,ownerId:current.ownerId,name:current.name,expiresAt:current.expiresAt,...(current.userId?{userId:current.userId,email:current.email}:{})};
 }
 function cookie(request:Request,name:string,value:string,expiresAt:number) {
-  return `${name}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(0,Math.floor((expiresAt-Date.now())/1000))}${new URL(request.url).protocol==='https:'?'; Secure':''}`;
+  return `${name}=${value}; HttpOnly; SameSite=Strict; Path=/; Max-Age=${Math.max(0,Math.floor((expiresAt-Date.now())/1000))}${publicOrigin(request).startsWith('https:')?'; Secure':''}`;
 }
 function response(request:Request,identity:Identity,token:string,backup?:{token:string;expiresAt:number}|null) {
   const headers=new Headers({'Content-Type':'application/json','Cache-Control':'no-store'});

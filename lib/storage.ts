@@ -1,4 +1,6 @@
 import { env } from 'cloudflare:workers';
+import {requestOrigin,allowedOrigin} from './request-origin';
+export function publicOrigin(request:Request){return requestOrigin(request,(env as unknown as {ATMOS_PUBLIC_ORIGIN?:string}).ATMOS_PUBLIC_ORIGIN);}
 export function db() {
   if (!env.DB) throw new Error('数据库暂不可用，请稍后重试。');
   return env.DB;
@@ -6,8 +8,7 @@ export function db() {
 import { ApiError } from './errors';
 export { ApiError } from './errors';
 export function checkOrigin(request: Request) {
-  const origin = request.headers.get('origin');
-  if (origin && origin !== new URL(request.url).origin) throw new ApiError('不允许跨站请求。', 403);
+  if (!allowedOrigin(request,(env as unknown as {ATMOS_PUBLIC_ORIGIN?:string}).ATMOS_PUBLIC_ORIGIN)) throw new ApiError('不允许跨站请求。', 403);
 }
 export function cookieToken(request: Request, name = 'atmos_session') {
   return request.headers.get('cookie')?.split(';').map(s => s.trim()).find(s => s.startsWith(name + '='))?.slice(name.length + 1).match(/^[a-f0-9]{64}$/)?.[0];

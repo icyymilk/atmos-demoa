@@ -1,0 +1,8 @@
+{$ATMOS_DOMAIN} {
+  encode zstd gzip
+  request_body {
+    max_size 2MB
+  }
+  # SSE responses flush immediately by content type; keep disconnect cancellation.
+  reverse_proxy atmos:8787
+}

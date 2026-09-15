@@ -21,7 +21,10 @@
     "test:auth": "node --import tsx tests/auth-integration.mjs",
     "test:memory": "node --import tsx tests/memory-integration.mjs",
     "test:controls": "node tests/controls-integration.mjs",
-    "test:guard": "node tests/guard-integration.mjs"
+    "test:guard": "node tests/guard-integration.mjs",
+    "test:ui": "playwright test",
+    "check": "npm run typecheck && npm run lint && npm test && npm run build",
+    "test:deployment": "node tests/deployment-smoke.mjs"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
@@ -55,6 +58,7 @@
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.37.1",
     "@cloudflare/workers-types": "4.20260515.1",
+    "@playwright/test": "^1.63.0",
     "@tailwindcss/postcss": "4.2.1",
     "@types/node": "22.19.19",
     "@types/react": "19.2.14",

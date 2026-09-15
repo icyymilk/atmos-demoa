@@ -1,0 +1,35 @@
+services:
+  atmos:
+    build:
+      context: ..
+    restart: unless-stopped
+    init: true
+    environment:
+      ATMOS_PUBLIC_ORIGIN: https://${ATMOS_DOMAIN:?Set ATMOS_DOMAIN to your actual domain}
+    volumes:
+      - atmos-data:/app/.atmos
+      - atmos-db:/app/.wrangler/state
+    expose:
+      - "8787"
+    stop_grace_period: 30s
+  proxy:
+    image: caddy:2
+    restart: unless-stopped
+    environment:
+      ATMOS_DOMAIN: ${ATMOS_DOMAIN:?Set ATMOS_DOMAIN}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    depends_on:
+      atmos:
+        condition: service_healthy
+volumes:
+  atmos-data:
+  atmos-db:
+  caddy-data:
+  caddy-config:
