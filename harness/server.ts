@@ -8,6 +8,8 @@ import { connectCore } from './core-tools';
 import { Workspace } from './workspace';
 import { LiveRun,readRunSnapshot } from './live-run';
 import { passwordOperation, PasswordBusy } from './passwords';
+import { MemoryStore,MemoryError,memoryAction } from './memory-store';
+import { connectMemory } from './memory-tools';
 import { runAgent } from './loop';
 import { ConnectionStore } from './connection-store';
 import { manageConnection, connectExternal } from './connections';
@@ -17,6 +19,7 @@ import type { AgentEvent, AgentCatalog } from '../lib/agent-types';
 
 const root=process.cwd(),token=process.env.ATMOS_HARNESS_TOKEN;
 const connectionStore=new ConnectionStore(root);
+const memoryStore=new MemoryStore(root);
 const connectionBusy=new Set<string>();
 if(!token)throw new Error('Harness requires a per-start authentication token.');
 const inputSchema=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),runId:z.string().uuid().optional(),prompt:z.string().min(1).max(4000),config:z.object({provider:z.string(),model:z.string().min(1).max(150),apiKey:z.string().min(1).max(1000)}),files:z.record(z.string().max(180000)).default({}),history:z.array(z.object({prompt:z.string(),summary:z.string()})).max(8).default([])});
@@ -45,6 +48,12 @@ const server=createServer(async(request,response)=>{
       if(active.has(input.owner)||locked(input.owner)){response.writeHead(409).end('{"error":"工作区正在运行或切换身份。"}');return;}
       const lease=randomUUID();identityLocks.set(input.owner,{lease,expires:Date.now()+30000});response.end(JSON.stringify({lease}));return;
     }
+    if(request.url==='/memory'){
+      const raw=await readBody(request),owner=z.string().regex(/^[a-f0-9]{64}$/).safeParse(raw.owner),parsed=memoryAction.safeParse(raw);
+      if(!owner.success||!parsed.success){response.writeHead(400,{'Content-Type':'application/json'}).end(JSON.stringify({error:'记忆参数无效，请检查标题、内容长度和标签。'}));return;}
+      try{const vault=await memoryStore.action(owner.data,parsed.data);response.setHeader('Content-Type','application/json');response.end(JSON.stringify(vault));}
+      catch(error){response.writeHead(error instanceof MemoryError?error.status:503,{'Content-Type':'application/json'}).end(JSON.stringify({error:error instanceof MemoryError?error.message:'记忆库暂不可用。'}));}return;
+    }
     if(request.url==='/connections'){
       const schema=z.object({owner:z.string().regex(/^[a-f0-9]{64}$/),action:z.enum(['list','connect','test','disconnect']),provider:z.enum(providers).optional(),token:z.string().max(2000).optional()});
       const parsed=schema.safeParse(await readBody(request));
@@ -62,6 +71,7 @@ const server=createServer(async(request,response)=>{
       const catalog:AgentCatalog={available:true,limits:extensions.limits,plugins:[],skills:extensions.skills.map(({id,name,plugin,description})=>({id,name,plugin,description}))};
       const workspace=new Workspace(path.join(root,'.atmos/catalog'));await workspace.init({});const core=await connectCore({workspace,skills:extensions.skills,signal:abort.signal});
       catalog.plugins.push({id:'core',name:'项目工作区',description:'隔离文件、网页、任务、记忆、Skill 与交付工具。',enabled:true,transport:'内置 MCP',tools:core.tools.map(t=>t.name)});await core.close();
+      const memory=await connectMemory(memoryStore,owner);catalog.plugins.push({id:'memory',name:'用户全局记忆',description:'跨项目检索、Markdown 索引和候选记忆；在记忆中心管理。',enabled:(await memoryStore.get(owner)).enabled,transport:'内置 MCP',tools:memory.tools.map(t=>t.name)});await memory.close();
       await Promise.all(extensions.plugins.map(async p=>{
         const item={id:p.id,name:p.name,description:p.description,enabled:p.enabled,transport:p.mcp?.transport||'Skill',tools:[] as string[],error:undefined as string|undefined};
         try{const c=await connectPlugin(p,abort.signal);if(c){item.tools=c.tools.map(t=>t.name);await c.close();}}catch{item.error='MCP 连接失败，请检查服务配置或网络。';}
@@ -94,7 +104,7 @@ const server=createServer(async(request,response)=>{
       response.writeHead(200,{'Content-Type':'text/event-stream; charset=utf-8','Cache-Control':'no-cache, no-transform','X-Accel-Buffering':'no'});
       await live.attach(workspace);
       heartbeat=setInterval(()=>{if(!response.destroyed)response.write(': heartbeat\n\n');},10000);
-      const result=await runAgent(input,{workspace,extensions,signal:abort.signal,runId,connectExternal:async signal=>{
+      const result=await runAgent(input,{workspace,extensions,signal:abort.signal,runId,memory:{store:memoryStore,owner:input.owner},connectExternal:async signal=>{
         const statuses=await connectionStore.list(input.owner);
         return Promise.all(statuses.map(status=>connectExternal(connectionStore,input.owner,status.provider,signal)));
       },workspaceEvent:event=>live.event(event),emit:event=>{const safe=JSON.parse(redact(JSON.stringify(event))) as AgentEvent;trace=mergeAgentEvent(trace,{...safe,input:safe.input?clipped(safe.input,600):undefined,output:safe.output?clipped(safe.output,1400):undefined});emit({type:'agent',event:safe});}});
